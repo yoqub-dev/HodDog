@@ -8,6 +8,7 @@ public class HodDogApplication {
 
     public static void main(String[] args) {
         SpringApplication.run(HodDogApplication.class, args);
+        System.out.println("HodDog Application Started");
     }
 
 }
