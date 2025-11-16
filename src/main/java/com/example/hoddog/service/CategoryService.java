@@ -1,9 +1,7 @@
 package com.example.hoddog.service;
 
-import com.example.hoddog.dto.CategoryRequest;
-import com.example.hoddog.dto.CategoryResponse;
+import com.example.hoddog.dto.CategoryDto;
 import com.example.hoddog.entity.Category;
-import com.example.hoddog.exception.ResourceNotFoundException;
 import com.example.hoddog.repository.CategoryRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -17,47 +15,52 @@ public class CategoryService {
 
     private final CategoryRepository categoryRepository;
 
-    public CategoryResponse create(CategoryRequest request) {
+    // CREATE
+    public Category create(CategoryDto dto) {
+
+        if (categoryRepository.existsByNameIgnoreCase(dto.getName())) {
+            throw new RuntimeException("Category already exists: " + dto.getName());
+        }
+
         Category category = Category.builder()
-                .name(request.getName())
+                .name(dto.getName())
                 .build();
-        categoryRepository.save(category);
-        return mapToResponse(category);
+
+        return categoryRepository.save(category);
     }
 
-    public CategoryResponse update(UUID id, CategoryRequest request) {
+    // GET ALL
+    public List<Category> getAll() {
+        return categoryRepository.findAll();
+    }
+
+    // GET BY ID
+    public Category getById(UUID id) {
+        return categoryRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Category not found"));
+    }
+
+    // UPDATE
+    public Category update(UUID id, CategoryDto dto) {
+
         Category category = categoryRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Category topilmadi"));
+                .orElseThrow(() -> new RuntimeException("Category not found"));
 
-        category.setName(request.getName());
-        categoryRepository.save(category);
-        return mapToResponse(category);
+        // Agar nomni o‘zgartirmoqchi bo‘lsa va mavjud bo‘lsa error
+        if (!category.getName().equalsIgnoreCase(dto.getName()) &&
+                categoryRepository.existsByNameIgnoreCase(dto.getName())) {
+            throw new RuntimeException("Category with this name already exists");
+        }
+
+        category.setName(dto.getName());
+        return categoryRepository.save(category);
     }
 
+    // DELETE
     public void delete(UUID id) {
         if (!categoryRepository.existsById(id)) {
-            throw new ResourceNotFoundException("Category topilmadi");
+            throw new RuntimeException("Category not found");
         }
         categoryRepository.deleteById(id);
-    }
-
-    public CategoryResponse get(UUID id) {
-        Category category = categoryRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Category topilmadi"));
-        return mapToResponse(category);
-    }
-
-    public List<CategoryResponse> getAll() {
-        return categoryRepository.findAll()
-                .stream()
-                .map(this::mapToResponse)
-                .toList();
-    }
-
-    private CategoryResponse mapToResponse(Category category) {
-        return CategoryResponse.builder()
-                .id(category.getId())
-                .name(category.getName())
-                .build();
     }
 }

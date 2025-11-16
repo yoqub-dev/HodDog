@@ -3,7 +3,7 @@ package com.example.hoddog.dto;
 import lombok.Data;
 
 @Data
-public class ModifierRequest {
+public class ModifierOptionDto {
     private String name;
-    private Double extraPrice;
+    private Double price;
 }

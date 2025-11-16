@@ -1,30 +1,27 @@
 package com.example.hoddog.entity;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import jakarta.persistence.*;
+import lombok.*;
+import java.util.*;
 
-import java.util.UUID;
-
-@Data
-@Builder
 @Entity
-@AllArgsConstructor
+@Table(name = "modifier")
+@Getter
+@Setter
 @NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class Modifier {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
+    @GeneratedValue
     private UUID id;
 
-    private String name;
+    @Column(nullable = false)
+    private String name; // e.g. Meva
 
-    private Double extraPrice;
+    private boolean active = true;
 
-
+    @OneToMany(mappedBy = "modifier", cascade = CascadeType.ALL)
+    private List<ModifierOption> options = new ArrayList<>();
 }

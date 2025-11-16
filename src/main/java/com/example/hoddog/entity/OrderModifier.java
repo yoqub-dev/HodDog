@@ -13,16 +13,19 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class ProductVariant {
+public class OrderModifier {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
+    @GeneratedValue
     private UUID id;
 
     @ManyToOne
-    @JoinColumn(name = "product_id")
-    private Product parentProduct;
+    @JoinColumn(name = "order_item_id")
+    private OrderItem orderItem;
 
-    private String name;
-    private Double price;
+    @ManyToOne
+    private ModifierOption option;
+
+    private Double price; // tanlangan option narxi
 }
+

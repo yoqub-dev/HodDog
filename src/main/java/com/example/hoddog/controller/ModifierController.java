@@ -1,7 +1,9 @@
 package com.example.hoddog.controller;
 
-import com.example.hoddog.dto.ModifierRequest;
-import com.example.hoddog.dto.ModifierResponse;
+import com.example.hoddog.dto.ModifierDto;
+import com.example.hoddog.dto.ModifierOptionDto;
+import com.example.hoddog.entity.Modifier;
+import com.example.hoddog.entity.ModifierOption;
 import com.example.hoddog.service.ModifierService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -14,30 +16,39 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class ModifierController {
 
-    private final ModifierService modifierService;
+    private final ModifierService service;
 
+    // CREATE GROUP + OPTIONS
     @PostMapping
-    public ModifierResponse create(@RequestBody ModifierRequest request) {
-        return modifierService.create(request);
+    public Modifier create(@RequestBody ModifierDto dto) {
+        return service.create(dto);
     }
 
-    @PutMapping("/{id}")
-    public ModifierResponse update(@PathVariable UUID id, @RequestBody ModifierRequest request) {
-        return modifierService.update(id, request);
-    }
-
-    @GetMapping("/{id}")
-    public ModifierResponse get(@PathVariable UUID id) {
-        return modifierService.get(id);
-    }
-
+    // GET ALL
     @GetMapping
-    public List<ModifierResponse> getAll() {
-        return modifierService.getAll();
+    public List<Modifier> getAll() {
+        return service.getAll();
     }
 
+    // GET BY ID
+    @GetMapping("/{id}")
+    public Modifier getById(@PathVariable UUID id) {
+        return service.getById(id);
+    }
+
+    // ADD OPTION TO GROUP
+    @PostMapping("/{id}/options")
+    public ModifierOption addOption(
+            @PathVariable UUID id,
+            @RequestBody ModifierOptionDto dto
+    ) {
+        return service.addOption(id, dto);
+    }
+
+    // DELETE GROUP
     @DeleteMapping("/{id}")
-    public void delete(@PathVariable UUID id) {
-        modifierService.delete(id);
+    public String delete(@PathVariable UUID id) {
+        service.delete(id);
+        return "Modifier group deleted";
     }
 }

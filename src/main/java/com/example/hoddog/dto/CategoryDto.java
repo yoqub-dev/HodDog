@@ -3,6 +3,6 @@ package com.example.hoddog.dto;
 import lombok.Data;
 
 @Data
-public class CategoryRequest {
+public class CategoryDto {
     private String name;
 }

@@ -1,14 +1,14 @@
 package com.example.hoddog.service;
 
-import com.example.hoddog.dto.*;
+import com.example.hoddog.dto.CompositeItemDto;
+import com.example.hoddog.dto.ProductDto;
 import com.example.hoddog.entity.*;
+import com.example.hoddog.enums.SoldBy;
 import com.example.hoddog.repository.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 
 @Service
 @RequiredArgsConstructor
@@ -16,174 +16,92 @@ public class ProductService {
 
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
-    private final ProductComponentRepository componentRepository;
+    private final ModifierRepository modifierRepository;
+    private final ProductRepository repo;
 
-    @Transactional
-    public ProductResponse create(ProductCreateRequest request) {
+    // CREATE
+    public Product create(ProductDto dto) {
 
-        validate(request);
-
-        var category = categoryRepository.findById(request.getCategoryId())
-                .orElseThrow(() -> new RuntimeException("Category not found"));
-
-        Product product = productRepository.save(Product.builder()
-                .name(request.getName())
-                .description(request.getDescription())
-                .sku(request.getSku())
-                .barcode(request.getBarcode())
-                .price(request.getPrice())
-                .cost(request.getCost())
-                .soldBy(request.getSoldBy())
-                .trackStock(request.isTrackStock())
-                .quantity(request.getQuantity())
-                .compositeItem(request.isCompositeItem())
-                .category(category)
-                .build()
-        );
-
-        List<ComponentResponse> componentResponses = null;
-
-        if (request.isCompositeItem() && request.getComponents() != null) {
-            var components = request.getComponents().stream()
-                    .map(c -> ProductComponent.builder()
-                            .parentProduct(product)
-                            .childProduct(productRepository.findById(c.getProductId())
-                                    .orElseThrow(() -> new RuntimeException("Child product not found")))
-                            .quantity(c.getQuantity())
-                            .build())
-                    .toList();
-
-            componentRepository.saveAll(components);
-
-            componentResponses = components.stream()
-                    .map(c -> ComponentResponse.builder()
-                            .productId(c.getChildProduct().getId())
-                            .productName(c.getChildProduct().getName())
-                            .quantity(c.getQuantity())
-                            .build()).toList();
+        // SKU AUTO GENERATE
+        if (dto.getSku() == null || dto.getSku().isEmpty()) {
+            dto.setSku(generateSku());
         }
 
-        return ProductResponse.builder()
-                .id(product.getId())
-                .name(product.getName())
-                .price(product.getPrice())
-                .quantity(product.getQuantity())
-                .compositeItem(product.isCompositeItem())
-                .categoryName(category.getName())
-                .components(componentResponses)
+        Product product = Product.builder()
+                .name(dto.getName())
+                .description(dto.getDescription())
+                .availableForSale(dto.getAvailableForSale())
+                .soldBy(SoldBy.valueOf(dto.getSoldBy()))
+                .price(dto.getPrice())
+                .cost(dto.getCost())
+                .sku(dto.getSku())
+                .composite(dto.getComposite())
+                .trackStock(dto.getTrackStock())
+                .quantity(dto.getQuantity())
+                .lowQuantity(dto.getLowQuantity())
                 .build();
-    }
 
-    private void validate(ProductCreateRequest r) {
-
-
-        if (!r.isCompositeItem() && r.getComponents() != null && !r.getComponents().isEmpty()) {
-            throw new RuntimeException("This product is not composite. Remove components.");
-        }
-
-
-        if (r.isCompositeItem() && (r.getComponents() == null || r.getComponents().isEmpty())) {
-            throw new RuntimeException("Composite product must include at least one component.");
-        }
-    }
-
-    @Transactional
-    public ProductResponse update(UUID id, ProductCreateRequest request) {
-
-        validate(request);
-
-        Product product = productRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Product not found"));
-
-        var category = categoryRepository.findById(request.getCategoryId())
+        // Category ulash
+        Category category = categoryRepository.findById(dto.getCategoryId())
                 .orElseThrow(() -> new RuntimeException("Category not found"));
-
-        product.setName(request.getName());
-        product.setDescription(request.getDescription());
-        product.setSku(request.getSku());
-        product.setBarcode(request.getBarcode());
-        product.setPrice(request.getPrice());
-        product.setCost(request.getCost());
-        product.setSoldBy(request.getSoldBy());
-        product.setTrackStock(request.isTrackStock());
-        product.setQuantity(request.getQuantity());
-        product.setCompositeItem(request.isCompositeItem());
         product.setCategory(category);
 
-        componentRepository.deleteAll(product.getComponents());
-        product.setComponents(null);
+        // Save product so composite can reference it
+        product = productRepository.save(product);
 
-        List<ComponentResponse> componentResponses = null;
+        // Composite item ingredientlar
+        if (Boolean.TRUE.equals(dto.getComposite()) && dto.getIngredients() != null) {
+            for (CompositeItemDto itemDto : dto.getIngredients()) {
 
-        if (request.isCompositeItem()) {
-            var newComponents = request.getComponents().stream()
-                    .map(c -> ProductComponent.builder()
-                            .parentProduct(product)
-                            .childProduct(productRepository.findById(c.getProductId())
-                                    .orElseThrow(() -> new RuntimeException("Child product not found")))
-                            .quantity(c.getQuantity())
-                            .build())
-                    .toList();
+                Product ingredient = productRepository.findById(itemDto.getIngredientProductId())
+                        .orElseThrow(() -> new RuntimeException("Ingredient product not found"));
 
-            componentRepository.saveAll(newComponents);
-            product.setComponents(newComponents);
+                CompositeItem compositeItem = CompositeItem.builder()
+                        .parentProduct(product)
+                        .ingredientProduct(ingredient)
+                        .quantity(itemDto.getQuantity())
+                        .build();
 
-            componentResponses = newComponents.stream()
-                    .map(c -> ComponentResponse.builder()
-                            .productId(c.getChildProduct().getId())
-                            .productName(c.getChildProduct().getName())
-                            .quantity(c.getQuantity())
-                            .build()).toList();
+                product.getIngredients().add(compositeItem);
+            }
+
+            // cost auto-calculation
+            double totalCost = calculateCompositeCost(product);
+            product.setCost(totalCost);
         }
 
-        return toResponse(product, componentResponses);
-    }
-
-    public ProductResponse get(UUID id) {
-
-        Product product = productRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Product not found"));
-
-        List<ComponentResponse> components = null;
-
-        if (product.isCompositeItem()) {
-            components = product.getComponents().stream()
-                    .map(c -> ComponentResponse.builder()
-                            .productId(c.getChildProduct().getId())
-                            .productName(c.getChildProduct().getName())
-                            .quantity(c.getQuantity())
-                            .build())
-                    .toList();
+        // ModifierGroups ulash
+        if (dto.getModifierGroupIds() != null) {
+            List<Modifier> groups = modifierRepository.findAllById(dto.getModifierGroupIds());
+            product.setModifierGroups(groups);
         }
 
-        return toResponse(product, components);
+        return productRepository.save(product);
     }
 
-    public List<ProductResponse> getAll() {
-        return productRepository.findAll().stream()
-                .map(p -> get(p.getId()))
-                .toList();
+    // Composite product cost auto calculation
+    private double calculateCompositeCost(Product product) {
+        return product.getIngredients().stream()
+                .mapToDouble(i -> i.getIngredientProduct().getCost() * i.getQuantity())
+                .sum();
     }
 
-    @Transactional
-    public void delete(UUID id) {
-        Product product = productRepository.findById(id)
+    // SKU AUTO-GENERATE (1001, 1002, 1003...)
+    private String generateSku() {
+        String maxSku = repo.findMaxSku();
+        if (maxSku == null) return "1001";
+        int next = Integer.parseInt(maxSku) + 1;
+        return String.valueOf(next);
+    }
+
+    // GET ALL
+    public List<Product> getAll() {
+        return productRepository.findAll();
+    }
+
+    // GET ONE
+    public Product getById(UUID id) {
+        return productRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Product not found"));
-
-        componentRepository.deleteAll(product.getComponents());
-        productRepository.delete(product);
     }
-
-    private ProductResponse toResponse(Product product, List<ComponentResponse> components) {
-        return ProductResponse.builder()
-                .id(product.getId())
-                .name(product.getName())
-                .price(product.getPrice())
-                .quantity(product.getQuantity())
-                .categoryName(product.getCategory().getName())
-                .compositeItem(product.isCompositeItem())
-                .components(components)
-                .build();
-    }
-
 }

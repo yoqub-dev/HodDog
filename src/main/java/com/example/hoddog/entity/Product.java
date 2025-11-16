@@ -3,6 +3,7 @@ package com.example.hoddog.entity;
 import com.example.hoddog.enums.SoldBy;
 import jakarta.persistence.*;
 import lombok.*;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -14,28 +15,53 @@ import java.util.UUID;
 public class Product {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
+    @GeneratedValue
     private UUID id;
 
+    @Column(nullable = false)
     private String name;
-    private String description;
-    private String sku;
-    private String barcode;
-    private Double price;
-    private Double cost;
 
-    @Enumerated(EnumType.STRING)
-    private SoldBy soldBy;
-
-    private boolean compositeItem;
-    private boolean trackStock;
-    private Double quantity;
 
     @ManyToOne
     @JoinColumn(name = "category_id")
     private Category category;
 
-    // ✅ Combo tarkibi
-    @OneToMany(mappedBy = "parentProduct", cascade = CascadeType.ALL)
-    private List<ProductComponent> components;
+
+    @Column(length = 500)
+    private String description;
+
+    private boolean availableForSale = true;
+
+    @Enumerated(EnumType.STRING)
+    private SoldBy soldBy = SoldBy.EACH;
+
+    private Double price;
+
+    private Double cost;
+
+    @Column(unique = true)
+    private String sku;
+
+    private boolean composite = false;
+
+    @OneToMany(mappedBy = "parentProduct", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<CompositeItem> ingredients = new ArrayList<>();
+
+    private boolean trackStock = false;
+
+    private Double quantity;
+
+    private Double lowQuantity;
+
+
+    @OneToOne(mappedBy = "product", cascade = CascadeType.ALL)
+    private ProductImage image;
+
+    @ManyToMany
+    @JoinTable(
+            name = "product_modifiers",
+            joinColumns = @JoinColumn(name = "product_id"),
+            inverseJoinColumns = @JoinColumn(name = "modifier_id")
+    )
+    private List<Modifier> modifierGroups = new ArrayList<>();
 }

@@ -1,26 +1,30 @@
 package com.example.hoddog.config;
 
-import com.example.hoddog.entity.Category;
-import com.example.hoddog.entity.Modifier;
+import com.example.hoddog.entity.*;
 import com.example.hoddog.enums.Role;
-import com.example.hoddog.repository.CategoryRepository;
-import com.example.hoddog.repository.ModifierRepository;
-import com.example.hoddog.repository.UserRepository;
+import com.example.hoddog.enums.SoldBy;
+import com.example.hoddog.repository.*;
 import com.example.hoddog.user.User;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
+import java.util.Random;
+
 @Component
 @RequiredArgsConstructor
 public class DataInitializer implements CommandLineRunner {
 
     private final UserRepository userRepository;
+    private final SupplierRepository supplierRepository;
     private final CategoryRepository categoryRepository;
-    private final PasswordEncoder passwordEncoder;
     private final ModifierRepository modifierRepository;
+    private final ModifierOptionRepository modifierOptionRepository;
+    private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
+    private final ProductRepository productRepository;
+
 
     @Override
     public void run(String... args) {
@@ -37,37 +41,88 @@ public class DataInitializer implements CommandLineRunner {
                     .role(Role.ADMIN)
                     .build();
 
-            userRepository.save(admin);
-            System.out.println("✅ Default ADMIN user yaratildi:");
+            admin = userRepository.save(admin);
+            System.out.println("✅ ADMIN user yaratildi.");
         } else {
-            System.out.println("ℹ️ Default ADMIN avvaldan mavjud.");
+            System.out.println("ℹ️ ADMIN avvaldan mavjud.");
         }
 
-        // ✅ Admin uchun JWT Token yaratish
-        String adminToken = jwtService.generateToken(admin);
-        System.out.println("🔑 ADMIN JWT TOKEN:");
-        System.out.println("Bearer " + adminToken);
-        System.out.println("----------------------------------------");
+        System.out.println("Bearer " + jwtService.generateToken(admin));
 
+
+        // ---------- DEFAULT SUPPLIER ----------
+        if (supplierRepository.count() == 0) {
+            Supplier supplier = Supplier.builder()
+                    .name("Default Supplier")
+                    .phone("+998900000000")
+                    .build();
+            supplierRepository.save(supplier);
+        }
+
+        // ---------- DEFAULT CATEGORY ----------
         if (categoryRepository.count() == 0) {
+            Category hotdog = Category.builder().name("Hot-Dog").build();
+            Category drinks = Category.builder().name("Drinks").build();
+            Category sauces = Category.builder().name("Sauces").build();
 
-            Category category = Category.builder()
-                    .name("Hot-doglar")
-                    .build();
-
-            categoryRepository.save(category);
-            System.out.println("Default Category yaratildi: Hot-doglar");
-        } else {
-            System.out.println("ℹ️ Categorylar avvaldan mavjud.");
+            categoryRepository.save(hotdog);
+            categoryRepository.save(drinks);
+            categoryRepository.save(sauces);
         }
 
-        if (!modifierRepository.existsByName("Cheese")) {
-            Modifier cheese = Modifier.builder()
-                    .name("Cheese")
-                    .extraPrice(4000.0)
+        // ---------- DEFAULT MODIFIER ----------
+        if (modifierRepository.count() == 0) {
+            Modifier modifier = Modifier.builder()
+                    .name("Sauce Options")
+                    .active(true)
                     .build();
-            modifierRepository.save(cheese);
-            System.out.println("✅ Default Modifier yaratildi: Cheese +4000");
+            modifierRepository.save(modifier);
+
+            // OPTIONS (modifierga bog‘langan)
+            ModifierOption ketchup = ModifierOption.builder()
+                    .modifier(modifier)
+                    .name("Ketchup")
+                    .price(2000.0)
+                    .build();
+
+            ModifierOption mayo = ModifierOption.builder()
+                    .modifier(modifier)
+                    .name("Mayonnaise")
+                    .price(2000.0)
+                    .build();
+
+            ModifierOption cheese = ModifierOption.builder()
+                    .modifier(modifier)
+                    .name("Cheese Sauce")
+                    .price(3000.0)
+                    .build();
+
+            modifierOptionRepository.save(ketchup);
+            modifierOptionRepository.save(mayo);
+            modifierOptionRepository.save(cheese);
+
         }
+
+        Category ingredientCat = categoryRepository.save(
+                Category.builder().name("Ingredientlar").build()
+        );
+        Product non = Product.builder()
+                .name("non")
+                .description("")
+                .availableForSale(false)
+                .soldBy(SoldBy.EACH)
+                .price(0.0)
+                .cost(0.0)
+                .sku("")   // yoki bo'sh qoldir, service auto-generate qiladi
+                .composite(false)
+                .trackStock(true)
+                .quantity(0.0)
+                .lowQuantity(5.0)
+                .category(ingredientCat)
+                .build();
+
+        productRepository.save(non);
+
+
     }
 }
