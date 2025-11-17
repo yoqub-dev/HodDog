@@ -30,24 +30,18 @@ public class DataInitializer implements CommandLineRunner {
     public void run(String... args) {
 
 
-        User admin = userRepository.findByEmail("admin@system.com").orElse(null);
 
-        if (admin == null) {
-            admin = User.builder()
-                    .firstName("Admin")
-                    .lastName("System")
+
+        if (!userRepository.existsByEmail("admin")) {
+            User admin = User.builder()
+                    .firstName("admin")
+                    .lastName("admin")
                     .email("admin")
                     .password(passwordEncoder.encode("123"))
                     .role(Role.ADMIN)
                     .build();
-
-            admin = userRepository.save(admin);
-            System.out.println("✅ ADMIN user yaratildi.");
-        } else {
-            System.out.println("ℹ️ ADMIN avvaldan mavjud.");
+            userRepository.save(admin);
         }
-
-        System.out.println("Bearer " + jwtService.generateToken(admin));
 
 
         // ---------- DEFAULT SUPPLIER ----------
