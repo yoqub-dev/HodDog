@@ -46,11 +46,17 @@ public class ProductService {
                 .orElseThrow(() -> new RuntimeException("Category not found"));
         product.setCategory(category);
 
-        // Save product so composite can reference it
+        // Saqlaymiz — composite bog‘lanishi uchun kerak
         product = productRepository.save(product);
+
+        // 🔥 MUHIM FIX — Lombok builder listni null qiladi
+        if (product.getIngredients() == null) {
+            product.setIngredients(new ArrayList<>());
+        }
 
         // Composite item ingredientlar
         if (Boolean.TRUE.equals(dto.getComposite()) && dto.getIngredients() != null) {
+
             for (CompositeItemDto itemDto : dto.getIngredients()) {
 
                 Product ingredient = productRepository.findById(itemDto.getIngredientProductId())
@@ -65,7 +71,7 @@ public class ProductService {
                 product.getIngredients().add(compositeItem);
             }
 
-            // cost auto-calculation
+            // Cost auto calculation
             double totalCost = calculateCompositeCost(product);
             product.setCost(totalCost);
         }
@@ -79,6 +85,7 @@ public class ProductService {
         return productRepository.save(product);
     }
 
+
     // Composite product cost auto calculation
     private double calculateCompositeCost(Product product) {
         return product.getIngredients().stream()
@@ -87,12 +94,20 @@ public class ProductService {
     }
 
     // SKU AUTO-GENERATE (1001, 1002, 1003...)
-    private String generateSku() {
-        String maxSku = repo.findMaxSku();
-        if (maxSku == null) return "1001";
-        int next = Integer.parseInt(maxSku) + 1;
-        return String.valueOf(next);
+    public String generateSku() {
+
+        String lastSku = repo.findMaxSku();
+
+        if (lastSku == null || lastSku.isBlank()) {
+            return "1001";
+        }
+        try {
+            return String.valueOf(Integer.parseInt(lastSku) + 1);
+        } catch (Exception e) {
+            return "1001";
+        }
     }
+
 
     // GET ALL
     public List<Product> getAll() {

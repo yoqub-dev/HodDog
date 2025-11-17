@@ -1,6 +1,7 @@
 package com.example.hoddog.entity;
 
 import com.example.hoddog.enums.SoldBy;
+import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
 import lombok.*;
 import java.util.ArrayList;
@@ -45,6 +46,8 @@ public class Product {
     private boolean composite = false;
 
     @OneToMany(mappedBy = "parentProduct", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
+    @JsonManagedReference
     private List<CompositeItem> ingredients = new ArrayList<>();
 
     private boolean trackStock = false;

@@ -1,5 +1,6 @@
 package com.example.hoddog.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 import java.util.UUID;
@@ -23,6 +24,7 @@ public class CompositeItem {
      */
     @ManyToOne
     @JoinColumn(name = "parent_product_id", nullable = false)
+    @JsonIgnore
     private Product parentProduct;
 
     /**

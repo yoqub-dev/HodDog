@@ -22,8 +22,5 @@ public class Discount {
     @Enumerated(EnumType.STRING)
     private DiscountType type; // PERCENTAGE or AMOUNT
 
-    // value:
-    // if type = PERCENTAGE → 5, 10, 25 etc
-    // if type = AMOUNT → 2000 so'm
     private Double value;
 }
