@@ -7,6 +7,7 @@ import com.example.hoddog.enums.SoldBy;
 import com.example.hoddog.repository.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
 
@@ -17,9 +18,9 @@ public class ProductService {
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
     private final ModifierRepository modifierRepository;
-    private final ProductRepository repo;
 
     // CREATE
+    @Transactional
     public Product create(ProductDto dto) {
 
         // SKU AUTO GENERATE
@@ -96,7 +97,7 @@ public class ProductService {
     // SKU AUTO-GENERATE (1001, 1002, 1003...)
     public String generateSku() {
 
-        String lastSku = repo.findMaxSku();
+        String lastSku = productRepository.findMaxSku();
 
         if (lastSku == null || lastSku.isBlank()) {
             return "1001";

@@ -31,15 +31,23 @@ public class SaleService {
 
         double subtotal = 0.0;
 
-        // ======================================
+        // safety: if items null, treat as empty
+        if (dto.getItems() == null || dto.getItems().isEmpty()) {
+            order.setSubtotal(0.0);
+            order.setFinalAmount(0.0);
+            return orderRepo.save(order);
+        }
+
+        // =========================================================
         // 1) ITEMS PROCESSING
-        // ======================================
+        // =========================================================
         for (SaleItemRequest itemReq : dto.getItems()) {
 
             Product p = productRepo.findById(itemReq.getProductId())
                     .orElseThrow(() -> new RuntimeException("Product not found"));
 
-            double productPrice = p.getPrice();
+            double productPrice = p.getPrice() != null ? p.getPrice() : 0.0;
+            double modifiersTotal = 0.0;                  // <-- declare ONCE here
             double itemTotal = productPrice * itemReq.getQuantity();
 
             OrderItem oi = OrderItem.builder()
@@ -49,13 +57,17 @@ public class SaleService {
                     .quantity(itemReq.getQuantity())
                     .build();
 
-            // ============ MODIFIERS ================
-            double modifiersTotal = 0.0;
+            // =============== MODIFIERS (OPTIONAL) =================
+            if (itemReq.getModifierOptionIds() != null && !itemReq.getModifierOptionIds().isEmpty()) {
 
-            if (itemReq.getModifierOptionIds() != null) {
                 for (UUID optId : itemReq.getModifierOptionIds()) {
-                    ModifierOption opt = optionRepo.findById(optId)
-                            .orElseThrow(() -> new RuntimeException("Option not found"));
+
+                    ModifierOption opt = optionRepo.findById(optId).orElse(null);
+
+                    if (opt == null) {
+                        // skip missing option (do not throw)
+                        continue;
+                    }
 
                     OrderModifier om = OrderModifier.builder()
                             .orderItem(oi)
@@ -65,35 +77,41 @@ public class SaleService {
 
                     oi.getModifiers().add(om);
 
-                    // modifier narxi
-                    modifiersTotal += opt.getPrice();
+                    modifiersTotal += opt.getPrice() != null ? opt.getPrice() : 0.0;
                 }
             }
 
+            // add modifiers to item total and set lineTotal
             itemTotal += modifiersTotal;
             oi.setLineTotal(itemTotal);
 
+            // add order item
             order.getItems().add(oi);
 
+            // accumulate subtotal
             subtotal += itemTotal;
 
-            // ======================================
-            // 2) TRACK STOCK MINUS
-            // ======================================
+            // =========================================================
+            // 2) TRACK STOCK - minus principal product quantity
+            // =========================================================
             if (p.isTrackStock()) {
-                p.setQuantity(p.getQuantity() - itemReq.getQuantity());
+                Double currentQty = p.getQuantity() != null ? p.getQuantity() : 0.0;
+                p.setQuantity(currentQty - itemReq.getQuantity());
                 productRepo.save(p);
             }
 
-            // ======================================
-            // 3) COMPOSITE INGREDIENT MINUS
-            // ======================================
-            if (p.isComposite()) {
+            // =========================================================
+            // 3) COMPOSITE INGREDIENT MINUS (AUTOMATIC)
+            // =========================================================
+            if (p.isComposite() && p.getIngredients() != null) {
                 for (CompositeItem ci : p.getIngredients()) {
                     Product ing = ci.getIngredientProduct();
-                    int minusQty = ci.getQuantity() * itemReq.getQuantity();
+                    if (ing == null) continue;
 
-                    ing.setQuantity(ing.getQuantity() - minusQty);
+                    double minusQty = ci.getQuantity() * itemReq.getQuantity();
+                    Double ingQty = ing.getQuantity() != null ? ing.getQuantity() : 0.0;
+                    ing.setQuantity(ingQty - minusQty);
+
                     productRepo.save(ing);
                 }
             }
@@ -101,43 +119,47 @@ public class SaleService {
 
         order.setSubtotal(subtotal);
 
-        // ======================================
-        // 4) DISCOUNT
-        // ======================================
+
+                // 4) DISCOUNT
+
         double discountAmount = 0.0;
 
-        if (dto.getDiscountId() != null) {
-            Discount dis = discountRepo.findById(dto.getDiscountId())
-                    .orElseThrow(() -> new RuntimeException("Discount not found"));
+        UUID disId = dto.getDiscountId();
 
-            order.setDiscountId(dis.getId());
+        if (disId != null) {
 
-            if (dis.getType() == DiscountType.PERCENTAGE) {
-                discountAmount = subtotal * (dis.getValue() / 100);
-            } else {
-                discountAmount = dis.getValue();
+
+            Discount dis = discountRepo.findById(disId).orElse(null);
+
+            if (dis != null) {
+                order.setDiscountId(dis.getId());
+
+                if (dis.getType() == DiscountType.PERCENTAGE) {
+                    discountAmount = subtotal * (dis.getValue() / 100.0);
+                } else {
+                    discountAmount = dis.getValue();
+                }
             }
         }
 
         order.setDiscountAmount(discountAmount);
 
-        // ======================================
+
+        // =========================================================
         // 5) FINAL AMOUNT
-        // ======================================
+        // =========================================================
         double finalAmount = subtotal - discountAmount;
         if (finalAmount < 0) finalAmount = 0.0;
 
         order.setFinalAmount(finalAmount);
 
-        // ======================================
+        // =========================================================
         // 6) PAYMENT + CHANGE
-        // ======================================
+        // =========================================================
         if (dto.getPaidAmount() != null) {
             order.setPaidAmount(dto.getPaidAmount());
-            order.setChangeAmount(dto.getPaidAmount() - finalAmount);
         }
 
         return orderRepo.save(order);
     }
 }
-

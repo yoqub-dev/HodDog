@@ -22,8 +22,6 @@ public class DataInitializer implements CommandLineRunner {
     private final ModifierRepository modifierRepository;
     private final ModifierOptionRepository modifierOptionRepository;
     private final PasswordEncoder passwordEncoder;
-    private final JwtService jwtService;
-    private final ProductRepository productRepository;
 
 
     @Override
@@ -96,27 +94,5 @@ public class DataInitializer implements CommandLineRunner {
             modifierOptionRepository.save(cheese);
 
         }
-
-//        Category ingredientCat = categoryRepository.save(
-//                Category.builder().name("Ingredientlar").build()
-//        );
-//        Product non = Product.builder()
-//                .name("non")
-//                .description("")
-//                .availableForSale(false)
-//                .soldBy(SoldBy.EACH)
-//                .price(0.0)
-//                .cost(0.0)
-//                .sku("")   // yoki bo'sh qoldir, service auto-generate qiladi
-//                .composite(false)
-//                .trackStock(true)
-//                .quantity(0.0)
-//                .lowQuantity(5.0)
-//                .category(ingredientCat)
-//                .build();
-//
-//        productRepository.save(non);
-
-
     }
 }

@@ -2,6 +2,7 @@ package com.example.hoddog.entity;
 
 
 import com.example.hoddog.enums.PaymentType;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDateTime;
@@ -10,6 +11,7 @@ import java.util.*;
 
 @Entity
 @Data
+@Table(name = "orders")
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
@@ -24,7 +26,6 @@ public class Order {
     private UUID discountId;          // qaysi discount ishlatilgan
     private Double finalAmount;       // yakuniy summa
     private Double paidAmount;        // kassaga tushgan pul
-    private Double changeAmount;      // qaytim
 
     private LocalDateTime createdAt;
 
@@ -32,5 +33,6 @@ public class Order {
     private PaymentType paymentType;
 
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL)
+    @JsonIgnore
     private List<OrderItem> items = new ArrayList<>();
 }
