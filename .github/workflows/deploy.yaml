@@ -39,5 +39,5 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           script: |
             cd /root/HodDog/target
-            mv *.jar app.jar
+            mv *.jar HodDog-0.0.1-SNAPSHOT.jar
             sudo systemctl restart hoddog.service
