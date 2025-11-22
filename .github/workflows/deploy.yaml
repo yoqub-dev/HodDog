@@ -40,4 +40,4 @@ jobs:
           script: |
             cd /root/HodDog/target
             mv *.jar app.jar
-            sudo systemctl restart hotdog.service
+            sudo systemctl restart hotdog
