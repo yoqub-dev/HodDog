@@ -28,7 +28,7 @@ jobs:
           username: root
           key: ${{ secrets.SSH_KEY }}
           source: "target/*.jar"
-          target: "/root/HodDog/target"
+          target: "/root/HodDog"
 
 
       - name: Restart service
