@@ -152,4 +152,14 @@ public class ProductService {
         return productRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Product not found"));
     }
+
+    // 🔎 UNIVERSAL SEARCH (faqat NAME + SKU)
+    public List<Product> universalSearch(String value) {
+        if (value == null || value.isBlank()) {
+            return getAll(); // agar bo‘sh yuborilsa, hamma product qaytaradi
+        }
+
+        return productRepository
+                .findByNameContainingIgnoreCaseOrSkuContainingIgnoreCase(value, value);
+    }
 }

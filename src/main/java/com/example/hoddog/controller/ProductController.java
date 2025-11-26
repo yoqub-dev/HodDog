@@ -79,4 +79,9 @@ public class ProductController {
         }
     }
 
+    @GetMapping("/search")
+    public List<Product> search(@RequestParam String value) {
+        return productService.universalSearch(value);
+    }
+
 }
