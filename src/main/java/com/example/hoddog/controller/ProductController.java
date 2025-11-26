@@ -79,7 +79,7 @@ public class ProductController {
         }
     }
 
-    @GetMapping("/search")
+    @GetMapping
     public List<Product> search(@RequestParam String value) {
         return productService.universalSearch(value);
     }
