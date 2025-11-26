@@ -79,9 +79,12 @@ public class ProductController {
         }
     }
 
-    @GetMapping
+    // 🔎 SEARCH (alohida endpoint)
+// GET /api/products/search?value=hot
+    @GetMapping("/search")
     public List<Product> search(@RequestParam String value) {
         return productService.universalSearch(value);
     }
+
 
 }
