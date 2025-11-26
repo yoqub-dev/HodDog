@@ -1,0 +1,31 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: hotdog_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: hotuser
+      POSTGRES_PASSWORD: 123
+      POSTGRES_DB: hotdog
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  backend:
+    build: .
+    container_name: hotdog_backend
+    restart: always
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/hotdog
+      SPRING_DATASOURCE_USERNAME: hotuser
+      SPRING_DATASOURCE_PASSWORD: 123
+    depends_on:
+      - postgres
+    ports:
+      - "8080:8080"
+
+volumes:
+  postgres_data:

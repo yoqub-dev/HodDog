@@ -8,6 +8,7 @@ import com.example.hoddog.repository.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.*;
 
@@ -18,6 +19,7 @@ public class ProductService {
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
     private final ModifierRepository modifierRepository;
+    private final FileStorageService fileStorageService;
 
     // CREATE
     @Transactional
@@ -47,10 +49,10 @@ public class ProductService {
                 .orElseThrow(() -> new RuntimeException("Category not found"));
         product.setCategory(category);
 
-        // Saqlaymiz — composite bog‘lanishi uchun kerak
+        // Saqlaymiz — composite bog'lanishi uchun kerak
         product = productRepository.save(product);
 
-        // 🔥 MUHIM FIX — Lombok builder listni null qiladi
+
         if (product.getIngredients() == null) {
             product.setIngredients(new ArrayList<>());
         }
@@ -87,6 +89,37 @@ public class ProductService {
     }
 
 
+    @Transactional
+    public Product uploadImage(UUID productId, MultipartFile file) {
+        Product product = productRepository.findById(productId)
+                .orElseThrow(() -> new RuntimeException("Product not found"));
+
+        // Eski rasmni o'chirish
+        if (product.getImageUrl() != null) {
+            fileStorageService.deleteFile(product.getImageUrl());
+        }
+
+        // Yangi rasmni saqlash
+        String imageUrl = fileStorageService.storeFile(file);
+        product.setImageUrl(imageUrl);
+
+        return productRepository.save(product);
+    }
+
+    // 🖼️ YANGI: Rasmni o'chirish
+    @Transactional
+    public Product deleteImage(UUID productId) {
+        Product product = productRepository.findById(productId)
+                .orElseThrow(() -> new RuntimeException("Product not found"));
+
+        if (product.getImageUrl() != null) {
+            fileStorageService.deleteFile(product.getImageUrl());
+            product.setImageUrl(null);
+        }
+
+        return productRepository.save(product);
+    }
+
     // Composite product cost auto calculation
     private double calculateCompositeCost(Product product) {
         return product.getIngredients().stream()
@@ -108,7 +141,6 @@ public class ProductService {
             return "1001";
         }
     }
-
 
     // GET ALL
     public List<Product> getAll() {

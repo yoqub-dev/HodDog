@@ -56,9 +56,7 @@ public class Product {
 
     private Double lowQuantity;
 
-
-    @OneToOne(mappedBy = "product", cascade = CascadeType.ALL)
-    private ProductImage image;
+    private String imageUrl;
 
     @ManyToMany
     @JoinTable(
