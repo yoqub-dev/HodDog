@@ -56,6 +56,8 @@ public class Product {
 
     private Double lowQuantity;
 
+    private boolean lowStockNotified = false;
+
     private String imageUrl;
 
     @ManyToMany

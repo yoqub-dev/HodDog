@@ -93,7 +93,6 @@ public class PurchaseOrderService {
 
             double finalCost = item.getPurchaseCost() + (allocatedExtra / item.getQuantity());
 
-            // AVERAGE COST FORMULA
             double oldQty = product.getQuantity() != null ? product.getQuantity() : 0;
             double oldCost = product.getCost() != null ? product.getCost() : finalCost;
 
@@ -103,11 +102,21 @@ public class PurchaseOrderService {
                     (oldQty * oldCost + newQty * finalCost)
                             / (oldQty + newQty);
 
+            double updatedQty = oldQty + newQty;
+
             product.setCost(newAverageCost);
-            product.setQuantity(oldQty + newQty);
+            product.setQuantity(updatedQty);
+
+            // ✅ TO‘G‘RI LOGIKA
+            if (product.getLowQuantity() != null && updatedQty > product.getLowQuantity()) {
+                // 🔄 Endi normal holat — qayta ogohlantirishga ruxsat
+                product.setLowStockNotified(false);
+            }
+            // agar updatedQty <= lowQuantity bo‘lsa → TRUE bo‘lib qoladi
 
             productRepo.save(product);
         }
     }
+
 }
 
