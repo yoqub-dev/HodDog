@@ -13,6 +13,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -47,7 +48,7 @@ public class ProductController {
         return ResponseEntity.ok(product);
     }
 
-    // 🖼️ YANGI: Rasmni o'chirish
+
     @DeleteMapping("/{id}/image")
     public ResponseEntity<Product> deleteImage(@PathVariable UUID id) {
         Product product = productService.deleteImage(id);
@@ -71,7 +72,7 @@ public class ProductController {
             byte[] imageBytes = Files.readAllBytes(filePath);
 
             return ResponseEntity.ok()
-                    .contentType(MediaType.IMAGE_JPEG) // yoki PNG
+                    .contentType(MediaType.IMAGE_JPEG)
                     .body(imageBytes);
 
         } catch (Exception e) {
@@ -79,8 +80,18 @@ public class ProductController {
         }
     }
 
-    // 🔎 SEARCH (alohida endpoint)
-// GET /api/products/search?value=hot
+    // DELETE PRODUCT
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> delete(@PathVariable UUID id) {
+        productService.delete(id);
+        return ResponseEntity.ok(Map.of(
+                "message", "Product deleted successfully",
+                "id", id
+        ));
+    }
+
+
+
     @GetMapping("/search")
     public List<Product> search(@RequestParam String value) {
         return productService.universalSearch(value);

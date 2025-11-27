@@ -21,6 +21,7 @@ public class ProductService {
     private final ModifierRepository modifierRepository;
     private final FileStorageService fileStorageService;
 
+
     // CREATE
     @Transactional
     public Product create(ProductDto dto) {
@@ -159,5 +160,18 @@ public class ProductService {
         }
         return productRepository
                 .findByNameContainingIgnoreCaseOrSkuContainingIgnoreCase(value, value);
+    }
+
+    @Transactional
+    public void delete(UUID productId) {
+
+        Product product = productRepository.findById(productId)
+                .orElseThrow(() -> new RuntimeException("Product not found"));
+
+        if (product.getImageUrl() != null) {
+            fileStorageService.deleteFile(product.getImageUrl());
+        }
+
+        productRepository.delete(product);
     }
 }

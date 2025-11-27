@@ -10,6 +10,8 @@ import com.example.hoddog.repository.OrderRepository;
 import com.example.hoddog.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import com.example.hoddog.service.TelegramService;
+
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -22,6 +24,8 @@ public class SaleService {
     private final DiscountRepository discountRepo;
     private final OrderRepository orderRepo;
     private final ModifierOptionRepository optionRepo;
+    private final TelegramService telegramService;
+
 
     public Order createSale(SaleRequest dto) {
 
@@ -97,7 +101,15 @@ public class SaleService {
             if (p.isTrackStock()) {
                 Double currentQty = p.getQuantity() != null ? p.getQuantity() : 0.0;
                 p.setQuantity(currentQty - itemReq.getQuantity());
-                productRepo.save(p);
+
+                Product savedProduct = productRepo.save(p);
+
+                // ✅ DEBUG LOG
+                System.out.println("✅ AFTER SALE: " + savedProduct.getName()
+                        + " qty=" + savedProduct.getQuantity()
+                        + " low=" + savedProduct.getLowQuantity());
+
+                checkLowStockAfterSale(savedProduct);
             }
 
             // =========================================================
@@ -112,9 +124,13 @@ public class SaleService {
                     Double ingQty = ing.getQuantity() != null ? ing.getQuantity() : 0.0;
                     ing.setQuantity(ingQty - minusQty);
 
-                    productRepo.save(ing);
+                    Product savedIng = productRepo.save(ing);
+
+                    // 🔔 INGREDIENT HAM LOW BO‘LSA TELEGRAMGA YUBORAMIZ
+                    checkLowStockAfterSale(savedIng);
                 }
             }
+
         }
 
         order.setSubtotal(subtotal);
@@ -162,4 +178,23 @@ public class SaleService {
 
         return orderRepo.save(order);
     }
+
+
+    private void checkLowStockAfterSale(Product product) {
+
+        if (product.isTrackStock()
+                && product.getQuantity() != null
+                && product.getLowQuantity() != null
+                && product.getQuantity() <= product.getLowQuantity()) {
+
+            String message = "⚠️ LOW STOCK (SOTUVDAN KEYIN)!\n\n" +
+                    "📦 Product: " + product.getName() + "\n" +
+                    "📊 Qolgan: " + product.getQuantity() + "\n" +
+                    "🚨 Min limit: " + product.getLowQuantity() + "\n" +
+                    "💰 Price: " + product.getPrice();
+
+            telegramService.sendMessage(message);
+        }
+    }
+
 }
