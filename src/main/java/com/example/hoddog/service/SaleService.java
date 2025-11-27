@@ -10,7 +10,6 @@ import com.example.hoddog.repository.OrderRepository;
 import com.example.hoddog.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import com.example.hoddog.service.TelegramService;
 
 
 import java.time.LocalDateTime;
@@ -24,7 +23,6 @@ public class SaleService {
     private final DiscountRepository discountRepo;
     private final OrderRepository orderRepo;
     private final ModifierOptionRepository optionRepo;
-    private final TelegramService telegramService;
 
 
     public Order createSale(SaleRequest dto) {
@@ -103,13 +101,6 @@ public class SaleService {
                 p.setQuantity(currentQty - itemReq.getQuantity());
 
                 Product savedProduct = productRepo.save(p);
-
-                // ✅ DEBUG LOG
-                System.out.println("✅ AFTER SALE: " + savedProduct.getName()
-                        + " qty=" + savedProduct.getQuantity()
-                        + " low=" + savedProduct.getLowQuantity());
-
-                checkLowStockAfterSale(savedProduct);
             }
 
             // =========================================================
@@ -125,9 +116,6 @@ public class SaleService {
                     ing.setQuantity(ingQty - minusQty);
 
                     Product savedIng = productRepo.save(ing);
-
-                    // 🔔 INGREDIENT HAM LOW BO‘LSA TELEGRAMGA YUBORAMIZ
-                    checkLowStockAfterSale(savedIng);
                 }
             }
 
@@ -180,21 +168,6 @@ public class SaleService {
     }
 
 
-    private void checkLowStockAfterSale(Product product) {
 
-        if (product.isTrackStock()
-                && product.getQuantity() != null
-                && product.getLowQuantity() != null
-                && product.getQuantity() <= product.getLowQuantity()) {
-
-            String message = "⚠️ LOW STOCK (SOTUVDAN KEYIN)!\n\n" +
-                    "📦 Product: " + product.getName() + "\n" +
-                    "📊 Qolgan: " + product.getQuantity() + "\n" +
-                    "🚨 Min limit: " + product.getLowQuantity() + "\n" +
-                    "💰 Price: " + product.getPrice();
-
-            telegramService.sendMessage(message);
-        }
-    }
 
 }
