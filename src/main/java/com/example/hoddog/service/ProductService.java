@@ -90,6 +90,112 @@ public class ProductService {
     }
 
 
+    // UPDATE
+    @Transactional
+    public Product update(UUID productId, ProductDto dto) {
+
+        Product product = productRepository.findById(productId)
+                .orElseThrow(() -> new RuntimeException("Product not found"));
+
+        // Oddiy fieldlar
+        if (dto.getName() != null) {
+            product.setName(dto.getName());
+        }
+        if (dto.getDescription() != null) {
+            product.setDescription(dto.getDescription());
+        }
+        if (dto.getAvailableForSale() != null) {
+            product.setAvailableForSale(dto.getAvailableForSale());
+        }
+        if (dto.getSoldBy() != null) {
+            product.setSoldBy(SoldBy.valueOf(dto.getSoldBy()));
+        }
+        if (dto.getPrice() != null) {
+            product.setPrice(dto.getPrice());
+        }
+
+        // SKU – agar jo'natilsa, yangilanadi; bo'sh bo'lsa eskicha qoladi
+        if (dto.getSku() != null && !dto.getSku().isBlank()) {
+            product.setSku(dto.getSku());
+        }
+
+        // Track stock bilan quantity'lar
+        if (dto.getTrackStock() != null) {
+            product.setTrackStock(dto.getTrackStock());
+        }
+        if (dto.getQuantity() != null) {
+            product.setQuantity(dto.getQuantity());
+        }
+        if (dto.getLowQuantity() != null) {
+            product.setLowQuantity(dto.getLowQuantity());
+        }
+
+        // Category
+        if (dto.getCategoryId() != null) {
+            Category category = categoryRepository.findById(dto.getCategoryId())
+                    .orElseThrow(() -> new RuntimeException("Category not found"));
+            product.setCategory(category);
+        }
+
+        // Composite logika
+        if (dto.getComposite() != null) {
+            product.setComposite(dto.getComposite());
+
+            // Avvalgi ingredientlarni tozalaymiz (orphanRemoval = true)
+            if (product.getIngredients() != null) {
+                product.getIngredients().clear();
+            } else {
+                product.setIngredients(new ArrayList<>());
+            }
+
+            // Agar composite true bo'lsa va yangi ingredients kelgan bo'lsa
+            if (Boolean.TRUE.equals(dto.getComposite()) && dto.getIngredients() != null) {
+
+                for (CompositeItemDto itemDto : dto.getIngredients()) {
+
+                    Product ingredient = productRepository.findById(itemDto.getIngredientProductId())
+                            .orElseThrow(() -> new RuntimeException("Ingredient product not found"));
+
+                    CompositeItem compositeItem = CompositeItem.builder()
+                            .parentProduct(product)
+                            .ingredientProduct(ingredient)
+                            .quantity(itemDto.getQuantity())
+                            .build();
+
+                    product.getIngredients().add(compositeItem);
+                }
+
+                // Auto cost hisoblash composite uchun
+                double totalCost = calculateCompositeCost(product);
+                product.setCost(totalCost);
+            } else {
+                // Oddiy product bo'lsa cost DTO'dan olinadi
+                if (dto.getCost() != null) {
+                    product.setCost(dto.getCost());
+                }
+            }
+        } else {
+            // composite field umuman jo'natilmasa, faqat cost ni yangilash (agar kelgan bo'lsa)
+            if (dto.getCost() != null) {
+                product.setCost(dto.getCost());
+            }
+        }
+
+        // Modifier group'lar
+        if (dto.getModifierGroupIds() != null) {
+            if (dto.getModifierGroupIds().isEmpty()) {
+                product.getModifierGroups().clear();
+            } else {
+                List<Modifier> groups = modifierRepository.findAllById(dto.getModifierGroupIds());
+                product.setModifierGroups(groups);
+            }
+        }
+
+        return productRepository.save(product);
+    }
+
+
+
     @Transactional
     public Product uploadImage(UUID productId, MultipartFile file) {
         Product product = productRepository.findById(productId)

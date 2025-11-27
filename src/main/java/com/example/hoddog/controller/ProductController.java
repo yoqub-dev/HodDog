@@ -28,6 +28,15 @@ public class ProductController {
         return productService.create(dto);
     }
 
+    @PutMapping("/{id}")
+    public Product update(
+            @PathVariable UUID id,
+            @RequestBody ProductDto dto
+    ) {
+        return productService.update(id, dto);
+    }
+
+
     @GetMapping
     public List<Product> getAll() {
         return productService.getAll();
