@@ -63,13 +63,16 @@ public class SecurityConfiguration {
 
         config.setAllowCredentials(true);
 
-        // 👇 FRONT PORT QO‘SHILDI (MUAMMO SHU YERDA EDI)
         config.setAllowedOriginPatterns(List.of(
                 "http://localhost:3000",
                 "http://localhost:3001",
                 "http://localhost:3002",
                 "http://localhost:3003",
-                "http://localhost:3005"
+                "http://localhost:3005",
+                "http://75.119.159.238",
+                "http://75.119.159.238:3000",
+                "https://75.119.159.238:3000",
+                "https://75.119.159.238"
         ));
 
         config.setAllowedHeaders(List.of(
