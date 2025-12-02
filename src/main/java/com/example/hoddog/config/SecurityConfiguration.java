@@ -3,6 +3,7 @@ package com.example.hoddog.config;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -24,11 +25,13 @@ public class SecurityConfiguration {
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+
         http
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
 
                 .authorizeHttpRequests(auth -> auth
+
                         // ✅ OCHIQ YO‘LLAR
                         .requestMatchers(
                                 "/api/auth/**",
@@ -40,10 +43,10 @@ public class SecurityConfiguration {
                                 "/uploads/**"
                         ).permitAll()
 
-                        // ✅ QOLGAN API'LAR TOKEN TALAB QILADI
+                        // ✅ API’LAR TOKEN TALAB QILADI
                         .requestMatchers("/api/**").authenticated()
 
-                        // ✅ QOLGAN HAMMA NARSA OCHIQ (frontend uchun)
+                        // ✅ FRONTEND OCHIQ QOLSIN
                         .anyRequest().permitAll()
                 )
 
@@ -52,8 +55,6 @@ public class SecurityConfiguration {
                 )
 
                 .authenticationProvider(authenticationProvider)
-
-                // ✅ JWT FILTER FAQAT API UCHUN
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
@@ -61,19 +62,22 @@ public class SecurityConfiguration {
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
+
         CorsConfiguration config = new CorsConfiguration();
 
         config.setAllowCredentials(true);
 
         config.setAllowedOriginPatterns(List.of(
                 "http://localhost:3000",
-                "https://superhotdog.duckdns.org"   // ✅ ASOSIY DOMEN
+                "https://superhotdog.duckdns.org"   // ✅ ASOSIY HTTPS DOMEN
         ));
 
         config.setAllowedHeaders(List.of("*"));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
 
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        UrlBasedCorsConfigurationSource source =
+                new UrlBasedCorsConfigurationSource();
+
         source.registerCorsConfiguration("/**", config);
         return source;
     }
