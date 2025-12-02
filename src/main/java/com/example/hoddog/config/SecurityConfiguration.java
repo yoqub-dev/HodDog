@@ -3,7 +3,6 @@ package com.example.hoddog.config;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -23,13 +22,14 @@ public class SecurityConfiguration {
     private final JwtAuthenticationFilter jwtAuthFilter;
     private final AuthenticationProvider authenticationProvider;
 
-
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+
                 .authorizeHttpRequests(auth -> auth
+                        // ✅ OCHIQ YO‘LLAR
                         .requestMatchers(
                                 "/api/auth/**",
                                 "/swagger-ui/**",
@@ -39,23 +39,25 @@ public class SecurityConfiguration {
                                 "/webjars/**",
                                 "/uploads/**"
                         ).permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/users/**")
-                        .hasAnyRole("ADMIN", "MANAGER", "USER")
-                        .requestMatchers("/api/users/**").hasRole("ADMIN")
-                        .anyRequest().authenticated()
+
+                        // ✅ QOLGAN API'LAR TOKEN TALAB QILADI
+                        .requestMatchers("/api/**").authenticated()
+
+                        // ✅ QOLGAN HAMMA NARSA OCHIQ (frontend uchun)
+                        .anyRequest().permitAll()
                 )
 
-
-
-                .sessionManagement(session -> session
-                        .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+                .sessionManagement(session ->
+                        session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
+
                 .authenticationProvider(authenticationProvider)
+
+                // ✅ JWT FILTER FAQAT API UCHUN
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
-
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
@@ -65,31 +67,16 @@ public class SecurityConfiguration {
 
         config.setAllowedOriginPatterns(List.of(
                 "http://localhost:3000",
-                "http://localhost:3001",
-                "http://localhost:3002",
-                "http://localhost:3003",
-                "http://localhost:3005",
-                "http://75.119.159.238",
-                "http://75.119.159.238:3000",
-                "https://75.119.159.238:3000",
-                "https://75.119.159.238"
+                "https://superhotdog.duckdns.org"   // ✅ ASOSIY DOMEN
         ));
 
-        config.setAllowedHeaders(List.of(
-                "Authorization",
-                "Cache-Control",
-                "Content-Type",
-                "X-Requested-With",
-                "Accept"
-        ));
-
-        config.setAllowedMethods(List.of(
-                "GET", "POST", "PUT", "DELETE", "OPTIONS"
-        ));
+        config.setAllowedHeaders(List.of("*"));
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
         return source;
     }
 }
+
 
