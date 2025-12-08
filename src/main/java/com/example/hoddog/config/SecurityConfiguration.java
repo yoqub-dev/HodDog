@@ -32,6 +32,9 @@ public class SecurityConfiguration {
 
                 .authorizeHttpRequests(auth -> auth
 
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+
+
                         // ✅ OCHIQ YO‘LLAR
                         .requestMatchers(
                                 "/api/auth/**",
