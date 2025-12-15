@@ -6,6 +6,7 @@ import com.example.hoddog.repository.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
 import java.util.*;
 
 @Service
@@ -15,6 +16,8 @@ public class PurchaseOrderService {
     private final PurchaseOrderRepository poRepo;
     private final SupplierRepository supplierRepo;
     private final ProductRepository productRepo;
+    private final ProductService productService;
+    private final PurchaseOrderRepository purchaseOrderRepository;
 
     public PurchaseOrder purchase(PurchaseOrderCreateDto dto) {
 
@@ -76,6 +79,7 @@ public class PurchaseOrderService {
     // INVENTORY UPDATE + AVERAGE COST
     private void applyInventoryUpdates(PurchaseOrder po) {
 
+
         double itemsSubtotal = po.getItems().stream()
                 .mapToDouble(PurchaseOrderItem::getSubtotal)
                 .sum();
@@ -113,8 +117,52 @@ public class PurchaseOrderService {
                 product.setLowStockNotified(false);
             }
             // agar updatedQty <= lowQuantity bo‘lsa → TRUE bo‘lib qoladi
-
             productRepo.save(product);
+        }
+        recalcCompositeParents(po);
+    }
+
+
+
+    public List<PurchaseReportDto> getPurchases(String period, LocalDate start, LocalDate end) {
+        LocalDate today = LocalDate.now();
+        LocalDate resolvedEnd = end != null ? end : today;
+        LocalDate resolvedStart;
+        switch (period.toLowerCase()) {
+            case "week" -> resolvedStart = resolvedEnd.minusWeeks(1);
+            case "month" -> resolvedStart = resolvedEnd.minusMonths(1);
+            case "year" -> resolvedStart = resolvedEnd.minusYears(1);
+            default -> resolvedStart = resolvedEnd.minusDays(30);
+        }
+        LocalDate useStart = start != null ? start : resolvedStart;
+        LocalDate useEnd = resolvedEnd;
+
+        return purchaseOrderRepository.aggregatePurchases(period, useStart, useEnd)
+                .stream()
+                .map(r -> new PurchaseReportDto(
+                        (UUID) r[0],
+                        (String) r[1],
+                        ((java.sql.Timestamp) r[2]).toLocalDateTime(),
+                        ((java.sql.Timestamp) r[3]).toLocalDateTime(),
+                        ((Number) r[4]).longValue(),
+                        r[5] != null ? ((Number) r[5]).doubleValue() : 0.0
+                ))
+                .toList();
+    }
+
+    private void recalcCompositeParents(PurchaseOrder po) {
+        // xarid qilingan ingredientlarga bog‘langan composite mahsulotlarni topish
+        Set<UUID> affectedIds = new HashSet<>();
+        for (PurchaseOrderItem item : po.getItems()) {
+            Product ingredient = item.getProduct();
+            // Ingredientdan parent composite’larni topish
+            List<Product> parents = productRepo.findAllByIngredientsIngredientProductId(ingredient.getId());
+            for (Product parent : parents) {
+                affectedIds.add(parent.getId());
+            }
+        }
+        if (!affectedIds.isEmpty()) {
+            productService.recalcCompositeCostsForProducts(new ArrayList<>(affectedIds));
         }
     }
 

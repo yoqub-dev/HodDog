@@ -1,18 +1,17 @@
 package com.example.hoddog.service;
 
+import com.example.hoddog.dto.ProductSalesReportDto;
 import com.example.hoddog.dto.SaleItemRequest;
 import com.example.hoddog.dto.SaleRequest;
 import com.example.hoddog.entity.*;
 import com.example.hoddog.enums.DiscountType;
-import com.example.hoddog.repository.DiscountRepository;
-import com.example.hoddog.repository.ModifierOptionRepository;
-import com.example.hoddog.repository.OrderRepository;
-import com.example.hoddog.repository.ProductRepository;
+import com.example.hoddog.repository.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -22,6 +21,7 @@ public class SaleService {
     private final ProductRepository productRepo;
     private final DiscountRepository discountRepo;
     private final OrderRepository orderRepo;
+    private final OrderItemRepository orderItemRepository;
     private final ModifierOptionRepository optionRepo;
 
 
@@ -165,6 +165,34 @@ public class SaleService {
         }
 
         return orderRepo.save(order);
+    }
+
+
+    public List<ProductSalesReportDto> getSales(String period, LocalDateTime start, LocalDateTime end) {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime resolvedEnd = end != null ? end : now;
+
+        // periodga qarab mantiqiy default
+        LocalDateTime resolvedStart;
+        switch (period.toLowerCase()) {
+            case "week" -> resolvedStart = resolvedEnd.minusWeeks(1);
+            case "month" -> resolvedStart = resolvedEnd.minusMonths(1);
+            case "year" -> resolvedStart = resolvedEnd.minusYears(1);
+            default -> resolvedStart = resolvedEnd.minusDays(30); // day yoki notanish qiymat uchun
+        }
+
+        LocalDateTime useStart = start != null ? start : resolvedStart;
+        LocalDateTime useEnd = resolvedEnd;
+
+        List<Object[]> rows = orderItemRepository.aggregateSales(period, useStart, useEnd);
+        return rows.stream().map(r -> new ProductSalesReportDto(
+                (UUID) r[0],
+                (String) r[1],
+                ((java.sql.Timestamp) r[2]).toLocalDateTime(),
+                ((java.sql.Timestamp) r[3]).toLocalDateTime(),
+                ((Number) r[4]).longValue(),
+                r[5] != null ? ((Number) r[5]).doubleValue() : 0.0
+        )).toList();
     }
 
 

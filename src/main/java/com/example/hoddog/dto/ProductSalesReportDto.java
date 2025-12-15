@@ -1,0 +1,13 @@
+package com.example.hoddog.dto;
+
+import java.time.LocalDateTime;
+import java.util.UUID;
+
+public record ProductSalesReportDto(
+        UUID productId,
+        String productName,
+        LocalDateTime periodStart,
+        LocalDateTime periodEnd,
+        Long quantity,
+        Double totalSales
+) {}

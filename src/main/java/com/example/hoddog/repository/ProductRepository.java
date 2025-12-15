@@ -18,4 +18,6 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
             String name,
             String sku
     );
+
+    List<Product> findAllByIngredientsIngredientProductId(UUID id);
 }

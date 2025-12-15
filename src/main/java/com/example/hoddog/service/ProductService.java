@@ -280,4 +280,20 @@ public class ProductService {
 
         productRepository.delete(product);
     }
+
+    // ProductService ichiga qo‘shing
+    @Transactional
+    public void recalcCompositeCostsForProducts(List<UUID> productIds) {
+        List<Product> products = productRepository.findAllById(productIds);
+        for (Product p : products) {
+            // faqat composite va ingredientlari bor bo‘lsa
+            if (p.isComposite() && p.getIngredients() != null) {
+                double totalCost = p.getIngredients().stream()
+                        .mapToDouble(ci -> ci.getIngredientProduct().getCost() * ci.getQuantity())
+                        .sum();
+                p.setCost(totalCost);
+                productRepository.save(p);
+            }
+        }
+    }
 }
