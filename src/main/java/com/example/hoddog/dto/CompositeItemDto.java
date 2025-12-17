@@ -7,5 +7,5 @@ import java.util.UUID;
 @Data
 public class CompositeItemDto {
     private UUID ingredientProductId;
-    private Integer quantity;
+    private Double quantity;
 }

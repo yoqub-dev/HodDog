@@ -40,5 +40,5 @@ public class CompositeItem {
      * Misol: 1 ta sosiska, 1 ta non, 2 qoshiq sous
      */
     @Column(nullable = false)
-    private int quantity;
+    private Double quantity;
 }
