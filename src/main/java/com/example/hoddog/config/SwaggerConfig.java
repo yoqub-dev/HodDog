@@ -26,7 +26,7 @@ public class SwaggerConfig {
                 .info(new Info()
                         .title("HotDog API")
                         .version("1.0")
-                        .description("Local Swagger UI with JWT authentication"))
+                        .description("Local Swagger UI with JWT authentication !"))
                 .addSecurityItem(securityRequirement)
                 .schemaRequirement("bearerAuth", securityScheme);
     }
