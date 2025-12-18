@@ -8,5 +8,4 @@ public class DiscountDto {
     private String name;
     private DiscountType type;
     private Double value;
-    private boolean restrictedAccess;
 }
