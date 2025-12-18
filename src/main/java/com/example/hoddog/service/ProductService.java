@@ -21,66 +21,69 @@ public class ProductService {
     private final ModifierRepository modifierRepository;
     private final FileStorageService fileStorageService;
 
-
-    // CREATE
+    // ✅ CREATE (name duplicate bo'lmasin + inactive bo'lsa reactivate)
     @Transactional
     public Product create(ProductDto dto) {
+        if (dto.getName() == null || dto.getName().isBlank()) {
+            throw new RuntimeException("Name is required");
+        }
 
         // SKU AUTO GENERATE
-        if (dto.getSku() == null || dto.getSku().isEmpty()) {
+        if (dto.getSku() == null || dto.getSku().isBlank()) {
             dto.setSku(generateSku());
         }
 
+        // ✅ oldingi product bormi?
+        Optional<Product> existingOpt = productRepository.findByNameIgnoreCase(dto.getName().trim());
+        if (existingOpt.isPresent()) {
+            Product existing = existingOpt.get();
+
+            // inactive bo'lsa — qayta yoqamiz
+            if (!existing.isActive()) {
+                existing.setActive(true);
+                existing.setAvailableForSale(true);
+            } else {
+                // active bo'lsa — duplicate yaratmaymiz
+                throw new RuntimeException("Bunday mahsulot allaqachon mavjud: " + existing.getName());
+            }
+
+            applyDtoToProduct(existing, dto, true);
+            return productRepository.save(existing);
+        }
+
         Product product = Product.builder()
-                .name(dto.getName())
+                .name(dto.getName().trim())
                 .description(dto.getDescription())
-                .availableForSale(dto.getAvailableForSale())
-                .soldBy(SoldBy.valueOf(dto.getSoldBy()))
+                .availableForSale(dto.getAvailableForSale() != null ? dto.getAvailableForSale() : true)
+                .active(true)
+                .soldBy(dto.getSoldBy() != null ? SoldBy.valueOf(dto.getSoldBy()) : SoldBy.EACH)
                 .price(dto.getPrice())
                 .cost(dto.getCost())
                 .sku(dto.getSku())
-                .composite(dto.getComposite())
-                .trackStock(dto.getTrackStock())
+                .composite(dto.getComposite() != null ? dto.getComposite() : false)
+                .trackStock(dto.getTrackStock() != null ? dto.getTrackStock() : false)
                 .quantity(dto.getQuantity())
                 .lowQuantity(dto.getLowQuantity())
                 .build();
 
         // Category ulash
-        Category category = categoryRepository.findById(dto.getCategoryId())
-                .orElseThrow(() -> new RuntimeException("Category not found"));
-        product.setCategory(category);
+        if (dto.getCategoryId() != null) {
+            Category category = categoryRepository.findById(dto.getCategoryId())
+                    .orElseThrow(() -> new RuntimeException("Category not found"));
+            product.setCategory(category);
+        }
 
-        // Saqlaymiz — composite bog'lanishi uchun kerak
+        // Saqlab olamiz
         product = productRepository.save(product);
 
-
-        if (product.getIngredients() == null) {
-            product.setIngredients(new ArrayList<>());
+        // Composite ingredientlar
+        if (Boolean.TRUE.equals(product.isComposite()) && dto.getIngredients() != null) {
+            attachCompositeIngredients(product, dto.getIngredients());
+            // cost auto
+            product.setCost(calculateCompositeCost(product));
         }
 
-        // Composite item ingredientlar
-        if (Boolean.TRUE.equals(dto.getComposite()) && dto.getIngredients() != null) {
-
-            for (CompositeItemDto itemDto : dto.getIngredients()) {
-
-                Product ingredient = productRepository.findById(itemDto.getIngredientProductId())
-                        .orElseThrow(() -> new RuntimeException("Ingredient product not found"));
-
-                CompositeItem compositeItem = CompositeItem.builder()
-                        .parentProduct(product)
-                        .ingredientProduct(ingredient)
-                        .quantity(itemDto.getQuantity())
-                        .build();
-
-                product.getIngredients().add(compositeItem);
-            }
-
-            // Cost auto calculation
-            double totalCost = calculateCompositeCost(product);
-            product.setCost(totalCost);
-        }
-
-        // ModifierGroups ulash
+        // ModifierGroups
         if (dto.getModifierGroupIds() != null) {
             List<Modifier> groups = modifierRepository.findAllById(dto.getModifierGroupIds());
             product.setModifierGroups(groups);
@@ -89,131 +92,33 @@ public class ProductService {
         return productRepository.save(product);
     }
 
-
-    // UPDATE
+    // ✅ UPDATE
     @Transactional
     public Product update(UUID productId, ProductDto dto) {
-
         Product product = productRepository.findById(productId)
                 .orElseThrow(() -> new RuntimeException("Product not found"));
 
-        // Oddiy fieldlar
-        if (dto.getName() != null) {
-            product.setName(dto.getName());
-        }
-        if (dto.getDescription() != null) {
-            product.setDescription(dto.getDescription());
-        }
-        if (dto.getAvailableForSale() != null) {
-            product.setAvailableForSale(dto.getAvailableForSale());
-        }
-        if (dto.getSoldBy() != null) {
-            product.setSoldBy(SoldBy.valueOf(dto.getSoldBy()));
-        }
-        if (dto.getPrice() != null) {
-            product.setPrice(dto.getPrice());
-        }
-
-        // SKU – agar jo'natilsa, yangilanadi; bo'sh bo'lsa eskicha qoladi
-        if (dto.getSku() != null && !dto.getSku().isBlank()) {
-            product.setSku(dto.getSku());
-        }
-
-        // Track stock bilan quantity'lar
-        if (dto.getTrackStock() != null) {
-            product.setTrackStock(dto.getTrackStock());
-        }
-        if (dto.getQuantity() != null) {
-            product.setQuantity(dto.getQuantity());
-        }
-        if (dto.getLowQuantity() != null) {
-            product.setLowQuantity(dto.getLowQuantity());
-        }
-
-        // Category
-        if (dto.getCategoryId() != null) {
-            Category category = categoryRepository.findById(dto.getCategoryId())
-                    .orElseThrow(() -> new RuntimeException("Category not found"));
-            product.setCategory(category);
-        }
-
-        // Composite logika
-        if (dto.getComposite() != null) {
-            product.setComposite(dto.getComposite());
-
-            // Avvalgi ingredientlarni tozalaymiz (orphanRemoval = true)
-            if (product.getIngredients() != null) {
-                product.getIngredients().clear();
-            } else {
-                product.setIngredients(new ArrayList<>());
-            }
-
-            // Agar composite true bo'lsa va yangi ingredients kelgan bo'lsa
-            if (Boolean.TRUE.equals(dto.getComposite()) && dto.getIngredients() != null) {
-
-                for (CompositeItemDto itemDto : dto.getIngredients()) {
-
-                    Product ingredient = productRepository.findById(itemDto.getIngredientProductId())
-                            .orElseThrow(() -> new RuntimeException("Ingredient product not found"));
-
-                    CompositeItem compositeItem = CompositeItem.builder()
-                            .parentProduct(product)
-                            .ingredientProduct(ingredient)
-                            .quantity(itemDto.getQuantity())
-                            .build();
-
-                    product.getIngredients().add(compositeItem);
-                }
-
-                // Auto cost hisoblash composite uchun
-                double totalCost = calculateCompositeCost(product);
-                product.setCost(totalCost);
-            } else {
-                // Oddiy product bo'lsa cost DTO'dan olinadi
-                if (dto.getCost() != null) {
-                    product.setCost(dto.getCost());
-                }
-            }
-        } else {
-            // composite field umuman jo'natilmasa, faqat cost ni yangilash (agar kelgan bo'lsa)
-            if (dto.getCost() != null) {
-                product.setCost(dto.getCost());
-            }
-        }
-
-        // Modifier group'lar
-        if (dto.getModifierGroupIds() != null) {
-            if (dto.getModifierGroupIds().isEmpty()) {
-                product.getModifierGroups().clear();
-            } else {
-                List<Modifier> groups = modifierRepository.findAllById(dto.getModifierGroupIds());
-                product.setModifierGroups(groups);
-            }
-        }
-
+        applyDtoToProduct(product, dto, false);
         return productRepository.save(product);
     }
 
-
-
+    // 🖼️ Upload image
     @Transactional
     public Product uploadImage(UUID productId, MultipartFile file) {
         Product product = productRepository.findById(productId)
                 .orElseThrow(() -> new RuntimeException("Product not found"));
 
-        // Eski rasmni o'chirish
         if (product.getImageUrl() != null) {
             fileStorageService.deleteFile(product.getImageUrl());
         }
 
-        // Yangi rasmni saqlash
         String imageUrl = fileStorageService.storeFile(file);
         product.setImageUrl(imageUrl);
 
         return productRepository.save(product);
     }
 
-    // 🖼️ YANGI: Rasmni o'chirish
+    // 🖼️ Delete image
     @Transactional
     public Product deleteImage(UUID productId) {
         Product product = productRepository.findById(productId)
@@ -227,73 +132,160 @@ public class ProductService {
         return productRepository.save(product);
     }
 
-    // Composite product cost auto calculation
-    private double calculateCompositeCost(Product product) {
-        return product.getIngredients().stream()
-                .mapToDouble(i -> i.getIngredientProduct().getCost() * i.getQuantity())
-                .sum();
-    }
-
-    // SKU AUTO-GENERATE (1001, 1002, 1003...)
-    public String generateSku() {
-
-        String lastSku = productRepository.findMaxSku();
-
-        if (lastSku == null || lastSku.isBlank()) {
-            return "1001";
-        }
-        try {
-            return String.valueOf(Integer.parseInt(lastSku) + 1);
-        } catch (Exception e) {
-            return "1001";
-        }
-    }
-
-    // GET ALL
+    // ✅ GET ALL (faqat active)
     public List<Product> getAll() {
-        return productRepository.findAll();
+        return productRepository.findAllByActiveTrue();
     }
 
-    // GET ONE
+    // ✅ GET ONE
     public Product getById(UUID id) {
         return productRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Product not found"));
     }
 
+    // ✅ SEARCH (faqat active)
     public List<Product> universalSearch(String value) {
         if (value == null || value.isBlank()) {
             return getAll();
         }
-        return productRepository
-                .findByNameContainingIgnoreCaseOrSkuContainingIgnoreCase(value, value);
+        return productRepository.searchActiveByNameOrSku(value.trim());
     }
 
+    // ✅ SOFT DELETE (inactive)
     @Transactional
     public void delete(UUID productId) {
-
         Product product = productRepository.findById(productId)
                 .orElseThrow(() -> new RuntimeException("Product not found"));
 
-        if (product.getImageUrl() != null) {
-            fileStorageService.deleteFile(product.getImageUrl());
-        }
+        // rasmni o‘chirish shart emas (xohlasang qoldirasan), lekin sotuvdan o‘chiriladi
+        product.setAvailableForSale(false);
+        product.setActive(false);
 
-        productRepository.delete(product);
+        productRepository.save(product);
     }
 
-    // ProductService ichiga qo‘shing
+    // ✅ Recalculate composite costs
     @Transactional
     public void recalcCompositeCostsForProducts(List<UUID> productIds) {
         List<Product> products = productRepository.findAllById(productIds);
         for (Product p : products) {
-            // faqat composite va ingredientlari bor bo‘lsa
             if (p.isComposite() && p.getIngredients() != null) {
-                double totalCost = p.getIngredients().stream()
-                        .mapToDouble(ci -> ci.getIngredientProduct().getCost() * ci.getQuantity())
-                        .sum();
-                p.setCost(totalCost);
+                p.setCost(calculateCompositeCost(p));
                 productRepository.save(p);
             }
+        }
+    }
+
+    // ----------------- Helpers -----------------
+
+    private void applyDtoToProduct(Product product, ProductDto dto, boolean isCreateFlow) {
+
+        if (dto.getName() != null && !dto.getName().isBlank()) {
+            // Update paytida nomni o‘zgartirish mumkin, lekin duplicate bo‘lib qolmasin
+            String newName = dto.getName().trim();
+            Optional<Product> other = productRepository.findByNameIgnoreCase(newName);
+            if (other.isPresent() && !other.get().getId().equals(product.getId())) {
+                throw new RuntimeException("Bunday nomdagi mahsulot bor: " + newName);
+            }
+            product.setName(newName);
+        }
+
+        if (dto.getDescription() != null) product.setDescription(dto.getDescription());
+        if (dto.getAvailableForSale() != null) product.setAvailableForSale(dto.getAvailableForSale());
+        if (dto.getSoldBy() != null) product.setSoldBy(SoldBy.valueOf(dto.getSoldBy()));
+        if (dto.getPrice() != null) product.setPrice(dto.getPrice());
+
+        // SKU (create flowda ham)
+        if (dto.getSku() != null && !dto.getSku().isBlank()) {
+            product.setSku(dto.getSku());
+        } else if (isCreateFlow && (product.getSku() == null || product.getSku().isBlank())) {
+            product.setSku(generateSku());
+        }
+
+        if (dto.getTrackStock() != null) product.setTrackStock(dto.getTrackStock());
+        if (dto.getQuantity() != null) product.setQuantity(dto.getQuantity());
+        if (dto.getLowQuantity() != null) product.setLowQuantity(dto.getLowQuantity());
+
+        // Category
+        if (dto.getCategoryId() != null) {
+            Category category = categoryRepository.findById(dto.getCategoryId())
+                    .orElseThrow(() -> new RuntimeException("Category not found"));
+            product.setCategory(category);
+        }
+
+        // Composite
+        if (dto.getComposite() != null) {
+            product.setComposite(dto.getComposite());
+
+            // ingredientlarni tozalash
+            if (product.getIngredients() != null) product.getIngredients().clear();
+
+            if (Boolean.TRUE.equals(dto.getComposite()) && dto.getIngredients() != null) {
+                attachCompositeIngredients(product, dto.getIngredients());
+                product.setCost(calculateCompositeCost(product));
+            } else {
+                // oddiy product cost
+                if (dto.getCost() != null) product.setCost(dto.getCost());
+            }
+        } else {
+            // composite kelmagan bo‘lsa, faqat cost update
+            if (dto.getCost() != null) product.setCost(dto.getCost());
+        }
+
+        // Modifier groups
+        if (dto.getModifierGroupIds() != null) {
+            if (dto.getModifierGroupIds().isEmpty()) {
+                product.getModifierGroups().clear();
+            } else {
+                List<Modifier> groups = modifierRepository.findAllById(dto.getModifierGroupIds());
+                product.setModifierGroups(groups);
+            }
+        }
+    }
+
+    private void attachCompositeIngredients(Product parent, List<CompositeItemDto> items) {
+        if (parent.getIngredients() == null) {
+            parent.setIngredients(new ArrayList<>());
+        }
+
+        for (CompositeItemDto itemDto : items) {
+            Product ingredient = productRepository.findById(itemDto.getIngredientProductId())
+                    .orElseThrow(() -> new RuntimeException("Ingredient product not found"));
+
+            // ✅ ingredient inactive bo‘lsa — retseptga qo‘shishga ruxsat bermaymiz
+            if (!ingredient.isActive()) {
+                throw new RuntimeException("Ingredient inactive: " + ingredient.getName());
+            }
+
+            CompositeItem compositeItem = CompositeItem.builder()
+                    .parentProduct(parent)
+                    .ingredientProduct(ingredient)
+                    .quantity(itemDto.getQuantity())
+                    .build();
+
+            parent.getIngredients().add(compositeItem);
+        }
+    }
+
+    private double calculateCompositeCost(Product product) {
+        if (product.getIngredients() == null) return 0.0;
+        return product.getIngredients().stream()
+                .mapToDouble(i -> {
+                    Double c = i.getIngredientProduct().getCost();
+                    Double q = i.getQuantity();
+                    return (c == null ? 0.0 : c) * (q == null ? 0.0 : q);
+                })
+                .sum();
+    }
+
+    // SKU AUTO-GENERATE (1001, 1002...)
+    public String generateSku() {
+        String lastSku = productRepository.findMaxSku();
+        if (lastSku == null || lastSku.isBlank()) return "1001";
+        try {
+            return String.valueOf(Integer.parseInt(lastSku) + 1);
+        } catch (Exception e) {
+            return "1001";
         }
     }
 }
