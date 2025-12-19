@@ -2,6 +2,7 @@ package com.example.hoddog.service;
 
 import com.example.hoddog.dto.*;
 import com.example.hoddog.entity.*;
+import com.example.hoddog.enums.SoldBy;
 import com.example.hoddog.repository.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -24,21 +25,45 @@ public class PurchaseOrderService {
         Supplier supplier = supplierRepo.findById(dto.getSupplierId())
                 .orElseThrow(() -> new RuntimeException("Supplier not found"));
 
+        // NPE bo'lmasligi uchun listlarni init qilamiz (entity builder default qilmagan bo'lsa ham)
         PurchaseOrder po = PurchaseOrder.builder()
                 .supplier(supplier)
                 .purchasedDate(dto.getPurchasedDate())
                 .notes(dto.getNotes())
+                .items(new ArrayList<>())
+                .extraCosts(new ArrayList<>())
                 .build();
 
         double totalAmount = 0.0;
 
         // ITEMLARNI QO‘SHISH
+        if (dto.getItems() == null || dto.getItems().isEmpty()) {
+            throw new RuntimeException("Items list is empty");
+        }
+
         for (PurchaseOrderItemDto itemDto : dto.getItems()) {
 
             Product product = productRepo.findById(itemDto.getProductId())
                     .orElseThrow(() -> new RuntimeException("Product not found"));
 
-            double subtotal = itemDto.getQuantity() * itemDto.getPurchaseCost();
+            if (itemDto.getQuantity() == null || itemDto.getQuantity() <= 0) {
+                throw new RuntimeException("Quantity must be greater than 0");
+            }
+            if (itemDto.getPurchaseCost() == null || itemDto.getPurchaseCost() < 0) {
+                throw new RuntimeException("Purchase cost must be >= 0");
+            }
+
+            // ✅ SOLD BY tekshiramiz:
+            // EACH   -> purchaseCost = 1 dona narxi
+            // WEIGHT -> purchaseCost = jami pul (total paid)
+            boolean isWeight = isWeight(product);
+
+            // ✅ subtotal:
+            // EACH:   qty * unitPrice
+            // WEIGHT: totalPaid (purchaseCostning o'zi)
+            double subtotal = isWeight
+                    ? itemDto.getPurchaseCost()
+                    : itemDto.getQuantity() * itemDto.getPurchaseCost();
 
             PurchaseOrderItem item = PurchaseOrderItem.builder()
                     .purchaseOrder(po)
@@ -53,8 +78,12 @@ public class PurchaseOrderService {
         }
 
         // EXTRA COSTLARNI QO‘SHISH
-        if (dto.getExtraCosts() != null) {
+        if (dto.getExtraCosts() != null && !dto.getExtraCosts().isEmpty()) {
             for (PurchaseOrderExtraCostDto ec : dto.getExtraCosts()) {
+
+                if (ec.getAmount() == null || ec.getAmount() < 0) {
+                    throw new RuntimeException("Extra cost amount must be >= 0");
+                }
 
                 PurchaseOrderExtraCost extra = PurchaseOrderExtraCost.builder()
                         .purchaseOrder(po)
@@ -69,60 +98,75 @@ public class PurchaseOrderService {
 
         po.setTotalAmount(totalAmount);
 
-        // ENDILIKDA INVENTORYNI YANGILAYMIZ
+        // INVENTORY UPDATE + AVERAGE COST
         applyInventoryUpdates(po);
 
         return poRepo.save(po);
     }
 
-
     // INVENTORY UPDATE + AVERAGE COST
     private void applyInventoryUpdates(PurchaseOrder po) {
-
 
         double itemsSubtotal = po.getItems().stream()
                 .mapToDouble(PurchaseOrderItem::getSubtotal)
                 .sum();
 
-        double extraCostTotal = po.getExtraCosts().stream()
-                .mapToDouble(PurchaseOrderExtraCost::getAmount)
-                .sum();
+        double extraCostTotal = (po.getExtraCosts() == null) ? 0.0 :
+                po.getExtraCosts().stream()
+                        .mapToDouble(PurchaseOrderExtraCost::getAmount)
+                        .sum();
 
         for (PurchaseOrderItem item : po.getItems()) {
 
             Product product = item.getProduct();
 
-            double proportion = item.getSubtotal() / itemsSubtotal;
+            // extra cost'larni subtotalga qarab taqsimlaymiz
+            double proportion = itemsSubtotal > 0 ? (item.getSubtotal() / itemsSubtotal) : 0.0;
             double allocatedExtra = proportion * extraCostTotal;
 
-            double finalCost = item.getPurchaseCost() + (allocatedExtra / item.getQuantity());
+            // ✅ finalUnitCost:
+            // EACH: purchaseCost = 1 dona narxi
+            //       finalUnitCost = unitPrice + allocatedExtra/qty
+            //
+            // WEIGHT: purchaseCost = jami pul
+            //         finalUnitCost = (totalPaid + allocatedExtra)/qty  => 1g narxi
+            boolean isWeight = isWeight(product);
 
-            double oldQty = product.getQuantity() != null ? product.getQuantity() : 0;
-            double oldCost = product.getCost() != null ? product.getCost() : finalCost;
+            double finalUnitCost;
+            if (isWeight) {
+                finalUnitCost = (item.getPurchaseCost() + allocatedExtra) / item.getQuantity();
+            } else {
+                finalUnitCost = item.getPurchaseCost() + (allocatedExtra / item.getQuantity());
+            }
+
+            double oldQty = product.getQuantity() != null ? product.getQuantity() : 0.0;
+            double oldCost = product.getCost() != null ? product.getCost() : finalUnitCost;
 
             double newQty = item.getQuantity();
-
-            double newAverageCost =
-                    (oldQty * oldCost + newQty * finalCost)
-                            / (oldQty + newQty);
-
             double updatedQty = oldQty + newQty;
+
+            // average cost: (oldQty*oldCost + newQty*finalUnitCost) / (oldQty+newQty)
+            double newAverageCost;
+            if (updatedQty > 0) {
+                newAverageCost = (oldQty * oldCost + newQty * finalUnitCost) / updatedQty;
+            } else {
+                newAverageCost = finalUnitCost;
+            }
 
             product.setCost(newAverageCost);
             product.setQuantity(updatedQty);
 
-            // ✅ TO‘G‘RI LOGIKA
+            // Low stock notified reset (agar limitdan chiqsa)
             if (product.getLowQuantity() != null && updatedQty > product.getLowQuantity()) {
-                // 🔄 Endi normal holat — qayta ogohlantirishga ruxsat
                 product.setLowStockNotified(false);
             }
             // agar updatedQty <= lowQuantity bo‘lsa → TRUE bo‘lib qoladi
+
             productRepo.save(product);
         }
+
         recalcCompositeParents(po);
     }
-
-
 
     public List<PurchaseReportDto> getPurchases(String period, LocalDate start, LocalDate end) {
         LocalDate today = LocalDate.now();
@@ -153,18 +197,22 @@ public class PurchaseOrderService {
     private void recalcCompositeParents(PurchaseOrder po) {
         // xarid qilingan ingredientlarga bog‘langan composite mahsulotlarni topish
         Set<UUID> affectedIds = new HashSet<>();
+
         for (PurchaseOrderItem item : po.getItems()) {
             Product ingredient = item.getProduct();
-            // Ingredientdan parent composite’larni topish
             List<Product> parents = productRepo.findAllByIngredientsIngredientProductId(ingredient.getId());
             for (Product parent : parents) {
                 affectedIds.add(parent.getId());
             }
         }
+
         if (!affectedIds.isEmpty()) {
             productService.recalcCompositeCostsForProducts(new ArrayList<>(affectedIds));
         }
     }
 
+    // ✅ Sizning Product entity'ingiz bo'yicha SOLD BY tekshiruvi
+    private boolean isWeight(Product product) {
+        return product.getSoldBy() != null && product.getSoldBy() == SoldBy.WEIGHT;
+    }
 }
-
