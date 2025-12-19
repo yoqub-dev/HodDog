@@ -30,6 +30,10 @@ public class OrderItem {
     @ManyToOne
     private Product product;
 
+    private Double unitCost;
+    private Double lineCogs;
+
+
     private Double price;      // product price at sale time
     private Integer quantity;
     private Double lineTotal;  // price * quantity + modifiers total

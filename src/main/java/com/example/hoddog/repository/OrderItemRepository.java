@@ -66,6 +66,33 @@ ORDER BY bucket_start DESC, qty DESC
                                   @Param("end") LocalDateTime end);
 
 
+    // ✅ WEEK: kun bo‘yicha COGS (line_cogs)
+    @Query(value = """
+        SELECT date_trunc('day', o.created_at) AS bucket,
+               COALESCE(SUM(oi.line_cogs), 0) AS total
+        FROM order_item oi
+        JOIN orders o ON o.id = oi.order_id
+        WHERE o.created_at >= :start AND o.created_at < :end
+        GROUP BY bucket
+        ORDER BY bucket
+    """, nativeQuery = true)
+    List<Object[]> sumCogsDaily(@Param("start") LocalDateTime start,
+                                @Param("end") LocalDateTime end);
+
+    // ✅ MONTH: oy bo‘yicha COGS
+    @Query(value = """
+        SELECT date_trunc('month', o.created_at) AS bucket,
+               COALESCE(SUM(oi.line_cogs), 0) AS total
+        FROM order_item oi
+        JOIN orders o ON o.id = oi.order_id
+        WHERE o.created_at >= :start AND o.created_at < :end
+        GROUP BY bucket
+        ORDER BY bucket
+    """, nativeQuery = true)
+    List<Object[]> sumCogsMonthly(@Param("start") LocalDateTime start,
+                                  @Param("end") LocalDateTime end);
+
+
 
 
 }

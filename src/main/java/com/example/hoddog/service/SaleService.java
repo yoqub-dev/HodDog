@@ -9,7 +9,6 @@ import com.example.hoddog.repository.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
-
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -24,7 +23,6 @@ public class SaleService {
     private final OrderItemRepository orderItemRepository;
     private final ModifierOptionRepository optionRepo;
 
-
     public Order createSale(SaleRequest dto) {
 
         Order order = new Order();
@@ -33,7 +31,6 @@ public class SaleService {
 
         double subtotal = 0.0;
 
-        // safety: if items null, treat as empty
         if (dto.getItems() == null || dto.getItems().isEmpty()) {
             order.setSubtotal(0.0);
             order.setFinalAmount(0.0);
@@ -41,35 +38,29 @@ public class SaleService {
         }
 
         // =========================================================
-        // 1) ITEMS PROCESSING
+        // 1) ITEMS
         // =========================================================
         for (SaleItemRequest itemReq : dto.getItems()) {
 
             Product p = productRepo.findById(itemReq.getProductId())
                     .orElseThrow(() -> new RuntimeException("Product not found"));
 
-            double productPrice = p.getPrice() != null ? p.getPrice() : 0.0;
-            double modifiersTotal = 0.0;                  // <-- declare ONCE here
-            double itemTotal = productPrice * itemReq.getQuantity();
+            double price = p.getPrice() != null ? p.getPrice() : 0.0;
+            double modifiersTotal = 0.0;
+            double lineTotal = price * itemReq.getQuantity();
 
             OrderItem oi = OrderItem.builder()
                     .order(order)
                     .product(p)
-                    .price(productPrice)
+                    .price(price)
                     .quantity(itemReq.getQuantity())
                     .build();
 
-            // =============== MODIFIERS (OPTIONAL) =================
-            if (itemReq.getModifierOptionIds() != null && !itemReq.getModifierOptionIds().isEmpty()) {
-
+            // ================= MODIFIERS =================
+            if (itemReq.getModifierOptionIds() != null) {
                 for (UUID optId : itemReq.getModifierOptionIds()) {
-
                     ModifierOption opt = optionRepo.findById(optId).orElse(null);
-
-                    if (opt == null) {
-                        // skip missing option (do not throw)
-                        continue;
-                    }
+                    if (opt == null) continue;
 
                     OrderModifier om = OrderModifier.builder()
                             .orderItem(oi)
@@ -78,66 +69,78 @@ public class SaleService {
                             .build();
 
                     oi.getModifiers().add(om);
-
                     modifiersTotal += opt.getPrice() != null ? opt.getPrice() : 0.0;
                 }
             }
 
-            // add modifiers to item total and set lineTotal
-            itemTotal += modifiersTotal;
-            oi.setLineTotal(itemTotal);
-
-            // add order item
-            order.getItems().add(oi);
-
-            // accumulate subtotal
-            subtotal += itemTotal;
+            lineTotal += modifiersTotal;
+            oi.setLineTotal(lineTotal);
+            subtotal += lineTotal;
 
             // =========================================================
-            // 2) TRACK STOCK - minus principal product quantity
+            // 🔴 2) TANNARX (COGS) HISOBLASH
             // =========================================================
-            if (p.isTrackStock()) {
-                Double currentQty = p.getQuantity() != null ? p.getQuantity() : 0.0;
-                p.setQuantity(currentQty - itemReq.getQuantity());
+            if (!p.isComposite()) {
+                // ODDIY MAHSULOT
+                double unitCost = p.getCost() != null ? p.getCost() : 0.0;
+                double lineCogs = unitCost * itemReq.getQuantity();
 
-                Product savedProduct = productRepo.save(p);
+                oi.setUnitCost(unitCost);
+                oi.setLineCogs(lineCogs);
+            } else {
+                // COMPOSITE (HOT-DOG)
+                double cogs = 0.0;
+
+                for (CompositeItem ci : p.getIngredients()) {
+                    Product ing = ci.getIngredientProduct();
+                    if (ing == null) continue;
+
+                    double ingUnitCost = ing.getCost() != null ? ing.getCost() : 0.0;
+                    double usedQty = ci.getQuantity() * itemReq.getQuantity();
+
+                    cogs += ingUnitCost * usedQty;
+                }
+
+                oi.setUnitCost(null);
+                oi.setLineCogs(cogs);
             }
 
+            order.getItems().add(oi);
+
             // =========================================================
-            // 3) COMPOSITE INGREDIENT MINUS (AUTOMATIC)
+            // 3) STOCK MINUS
             // =========================================================
-            if (p.isComposite() && p.getIngredients() != null) {
+            if (p.isTrackStock()) {
+                double current = p.getQuantity() != null ? p.getQuantity() : 0.0;
+                p.setQuantity(current - itemReq.getQuantity());
+                productRepo.save(p);
+            }
+
+            if (p.isComposite()) {
                 for (CompositeItem ci : p.getIngredients()) {
                     Product ing = ci.getIngredientProduct();
                     if (ing == null) continue;
 
                     double minusQty = ci.getQuantity() * itemReq.getQuantity();
-                    Double ingQty = ing.getQuantity() != null ? ing.getQuantity() : 0.0;
+                    double ingQty = ing.getQuantity() != null ? ing.getQuantity() : 0.0;
                     ing.setQuantity(ingQty - minusQty);
 
-                    Product savedIng = productRepo.save(ing);
+                    productRepo.save(ing);
                 }
             }
-
         }
 
         order.setSubtotal(subtotal);
 
-
-                // 4) DISCOUNT
-
+        // =========================================================
+        // 4) DISCOUNT
+        // =========================================================
         double discountAmount = 0.0;
 
-        UUID disId = dto.getDiscountId();
-
-        if (disId != null) {
-
-
-            Discount dis = discountRepo.findById(disId).orElse(null);
-
+        if (dto.getDiscountId() != null) {
+            Discount dis = discountRepo.findById(dto.getDiscountId()).orElse(null);
             if (dis != null) {
                 order.setDiscountId(dis.getId());
-
                 if (dis.getType() == DiscountType.PERCENTAGE) {
                     discountAmount = subtotal * (dis.getValue() / 100.0);
                 } else {
@@ -148,18 +151,13 @@ public class SaleService {
 
         order.setDiscountAmount(discountAmount);
 
-
         // =========================================================
-        // 5) FINAL AMOUNT
+        // 5) FINAL
         // =========================================================
         double finalAmount = subtotal - discountAmount;
         if (finalAmount < 0) finalAmount = 0.0;
-
         order.setFinalAmount(finalAmount);
 
-        // =========================================================
-        // 6) PAYMENT + CHANGE
-        // =========================================================
         if (dto.getPaidAmount() != null) {
             order.setPaidAmount(dto.getPaidAmount());
         }
@@ -167,24 +165,28 @@ public class SaleService {
         return orderRepo.save(order);
     }
 
-
+    // =========================================================
+    // SALES REPORT
+    // =========================================================
     public List<ProductSalesReportDto> getSales(String period, LocalDateTime start, LocalDateTime end) {
+
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime resolvedEnd = end != null ? end : now;
-
-        // periodga qarab mantiqiy default
         LocalDateTime resolvedStart;
+
         switch (period.toLowerCase()) {
             case "week" -> resolvedStart = resolvedEnd.minusWeeks(1);
             case "month" -> resolvedStart = resolvedEnd.minusMonths(1);
             case "year" -> resolvedStart = resolvedEnd.minusYears(1);
-            default -> resolvedStart = resolvedEnd.minusDays(30); // day yoki notanish qiymat uchun
+            default -> resolvedStart = resolvedEnd.minusDays(30);
         }
 
-        LocalDateTime useStart = start != null ? start : resolvedStart;
-        LocalDateTime useEnd = resolvedEnd;
+        List<Object[]> rows = orderItemRepository.aggregateSales(
+                period,
+                start != null ? start : resolvedStart,
+                resolvedEnd
+        );
 
-        List<Object[]> rows = orderItemRepository.aggregateSales(period, useStart, useEnd);
         return rows.stream().map(r -> new ProductSalesReportDto(
                 (UUID) r[0],
                 (String) r[1],
@@ -194,8 +196,4 @@ public class SaleService {
                 r[5] != null ? ((Number) r[5]).doubleValue() : 0.0
         )).toList();
     }
-
-
-
-
 }
