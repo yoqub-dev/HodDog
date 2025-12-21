@@ -1,9 +1,13 @@
 package com.example.hoddog.service;
 
-import com.example.hoddog.dto.AnalyticsSummaryDto;
+import com.example.hoddog.dto.ProfitExpenseChartDto;
+import com.example.hoddog.dto.PurchasedProductRowView;
 import com.example.hoddog.repository.OrderItemRepository;
 import com.example.hoddog.repository.OrderRepository;
+import com.example.hoddog.repository.PurchaseOrderItemRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import java.sql.Timestamp;
@@ -17,8 +21,9 @@ public class AnalyticsService {
 
     private final OrderRepository orderRepo;
     private final OrderItemRepository orderItemRepo;
+    private final PurchaseOrderItemRepository purchaseOrderItemRepository;
 
-    public AnalyticsSummaryDto getSummary(String mode, LocalDate start, LocalDate end) {
+    public ProfitExpenseChartDto getSummary(String mode, LocalDate start, LocalDate end) {
 
         String m = (mode == null) ? "week" : mode.toLowerCase();
 
@@ -31,7 +36,7 @@ public class AnalyticsService {
     // =========================
     // WEEK (last 7 days)
     // =========================
-    private AnalyticsSummaryDto buildWeekly(LocalDate start, LocalDate end) {
+    private ProfitExpenseChartDto buildWeekly(LocalDate start, LocalDate end) {
 
         LocalDate today = LocalDate.now();
         LocalDate useEnd = (end != null) ? end : today;
@@ -45,31 +50,30 @@ public class AnalyticsService {
         Map<LocalDate, Double> cogsMap = toDayMap(orderItemRepo.sumCogsDaily(startDt, endDt));
 
         List<String> labels = new ArrayList<>();
-        List<Double> revenue = new ArrayList<>();
         List<Double> cogs = new ArrayList<>();
         List<Double> profit = new ArrayList<>();
 
         LocalDate d = useStart;
         while (!d.isAfter(useEnd)) {
-            labels.add(d.getDayOfWeek().getDisplayName(TextStyle.SHORT, Locale.ENGLISH)); // Mon..Sun
+            labels.add(d.getDayOfWeek().getDisplayName(TextStyle.SHORT, Locale.ENGLISH));
 
             double r = revenueMap.getOrDefault(d, 0.0);
             double c = cogsMap.getOrDefault(d, 0.0);
 
-            revenue.add(r);
             cogs.add(c);
             profit.add(r - c);
 
             d = d.plusDays(1);
         }
 
-        return new AnalyticsSummaryDto(labels, revenue, cogs, profit);
+        return new ProfitExpenseChartDto(labels, cogs, profit);
+
     }
 
     // =========================
     // MONTH (last 12 months)
     // =========================
-    private AnalyticsSummaryDto buildMonthly(LocalDate start, LocalDate end) {
+    private ProfitExpenseChartDto buildMonthly(LocalDate start, LocalDate end) {
 
         YearMonth now = YearMonth.now();
         YearMonth endYm = (end != null) ? YearMonth.from(end) : now;
@@ -82,7 +86,6 @@ public class AnalyticsService {
         Map<YearMonth, Double> cogsMap = toMonthMap(orderItemRepo.sumCogsMonthly(startDt, endDt));
 
         List<String> labels = new ArrayList<>();
-        List<Double> revenue = new ArrayList<>();
         List<Double> cogs = new ArrayList<>();
         List<Double> profit = new ArrayList<>();
 
@@ -93,14 +96,14 @@ public class AnalyticsService {
             double r = revenueMap.getOrDefault(ym, 0.0);
             double c = cogsMap.getOrDefault(ym, 0.0);
 
-            revenue.add(r);
             cogs.add(c);
             profit.add(r - c);
 
             ym = ym.plusMonths(1);
         }
 
-        return new AnalyticsSummaryDto(labels, revenue, cogs, profit);
+        return new ProfitExpenseChartDto(labels, cogs, profit);
+
     }
 
     // =========================
@@ -127,4 +130,53 @@ public class AnalyticsService {
         }
         return map;
     }
+
+    public Page<PurchasedProductRowView> getPurchasedProducts(String mode,
+                                                              LocalDate start,
+                                                              LocalDate end,
+                                                              Pageable pageable) {
+
+        String m = (mode == null) ? "today" : mode.toLowerCase();
+        LocalDate today = LocalDate.now();
+
+        LocalDate startD;
+        LocalDate endExclusive;
+
+        switch (m) {
+            case "today" -> {
+                startD = today;
+                endExclusive = today.plusDays(1);
+            }
+            case "week" -> {
+                LocalDate useEnd = (end != null) ? end : today;
+                LocalDate useStart = (start != null) ? start : useEnd.minusDays(6);
+                startD = useStart;
+                endExclusive = useEnd.plusDays(1);
+            }
+            case "month" -> {
+                YearMonth endYm = (end != null) ? YearMonth.from(end) : YearMonth.now();
+                YearMonth startYm = (start != null) ? YearMonth.from(start) : endYm;
+
+                startD = startYm.atDay(1);
+                endExclusive = endYm.plusMonths(1).atDay(1);
+            }
+            case "year" -> {
+                int y = (end != null) ? end.getYear() : today.getYear();
+                startD = LocalDate.of(y, 1, 1);
+                endExclusive = LocalDate.of(y + 1, 1, 1);
+            }
+            case "custom" -> {
+                if (start == null || end == null) {
+                    throw new RuntimeException("custom mode uchun start va end shart");
+                }
+                startD = start;
+                endExclusive = end.plusDays(1);
+            }
+            default -> throw new RuntimeException("Noto‘g‘ri mode: " + mode);
+        }
+
+        return purchaseOrderItemRepository.topPurchasedProductsPage(startD, endExclusive, pageable);
+    }
+
+
 }

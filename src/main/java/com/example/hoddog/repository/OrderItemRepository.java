@@ -1,7 +1,10 @@
 package com.example.hoddog.repository;
 
 import com.example.hoddog.dto.ProfitReportDto;
+import com.example.hoddog.dto.SoldProductRowDto;
 import com.example.hoddog.entity.OrderItem;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -11,6 +14,38 @@ import java.util.List;
 import java.util.UUID;
 
 public interface OrderItemRepository extends JpaRepository<OrderItem, UUID> {
+
+
+    @Query(
+            value = """
+            SELECT
+                p.sku AS sku,
+                p.name AS productName,
+                COALESCE(SUM(oi.quantity), 0) AS totalOrder,
+                COALESCE(SUM(oi.line_total), 0) AS totalAmount
+            FROM order_item oi
+            JOIN orders o ON o.id = oi.order_id
+            JOIN product p ON p.id = oi.product_id
+            WHERE o.created_at >= :start AND o.created_at < :end
+            GROUP BY p.sku, p.name
+            ORDER BY totalOrder DESC
+        """,
+            countQuery = """
+            SELECT COUNT(*) FROM (
+                SELECT p.id
+                FROM order_item oi
+                JOIN orders o ON o.id = oi.order_id
+                JOIN product p ON p.id = oi.product_id
+                WHERE o.created_at >= :start AND o.created_at < :end
+                GROUP BY p.id
+            ) x
+        """,
+            nativeQuery = true
+    )
+    Page<SoldProductRowDto> topSoldProductsPage(@Param("start") LocalDateTime start,
+                                                @Param("end") LocalDateTime end,
+                                                Pageable pageable);
+
 
     @Query("""
     SELECT 

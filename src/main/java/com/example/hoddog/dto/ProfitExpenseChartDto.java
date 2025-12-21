@@ -7,9 +7,13 @@ import java.util.List;
 
 @Data
 @AllArgsConstructor
-public class AnalyticsSummaryDto {
+public class ProfitExpenseChartDto {
+
     private List<String> labels;
-    private List<Double> revenue;
-    private List<Double> cogs;
+
+    // 1-chiziq: harajat (COGS)
+    private List<Double> expense;
+
+    // 2-chiziq: foyda
     private List<Double> profit;
 }
